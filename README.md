@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Status-Work_In_Progress-orange?style=for-the-badge" />
 </p>
 
-<h1 align="center">🐕 Mirza — Mac Mini Apple Silicon Server</h1>
+<h1 align="center"> Mirza — Mac Mini Apple Silicon Server</h1>
 
 <p align="center">
   <i>Transformez votre Mac Mini en bête de course pour l'IA générative locale.</i><br/>
@@ -17,7 +17,7 @@
 
 ---
 
-## 📖 Table des matières
+##  Table des matières
 
 - [Présentation](#-présentation)
 - [Prérequis](#-prérequis)
@@ -31,7 +31,7 @@
 
 ---
 
-## 🧐 Présentation
+##  Présentation
 
 **Mirza** documente — et automatise — la transformation complète d'un Mac Mini Apple Silicon (M1, M2, M3, M4…) d'une paisible machine de bureau en un **serveur d'inférence IA dédié**, robuste et monitoré de bout en bout.
 
@@ -42,7 +42,7 @@
 
 ---
 
-## ✅ Prérequis
+## Prérequis
 
 | Élément | Version / Détail |
 |---|---|
@@ -57,7 +57,7 @@
 
 ---
 
-## 🔧 Phase 1 — Préparation de macOS (depuis l'interface graphique)
+##  Phase 1 — Préparation de macOS (depuis l'interface graphique)
 
 Avant de débrancher l'écran et le clavier, il faut convaincre macOS qu'il est un serveur maintenant. Il va s'y faire.
 
@@ -83,11 +83,11 @@ Toujours dans **Réglages Système** → **Général** → **Partage** :
 
 Activez **Session à distance** (c'est le serveur SSH intégré à macOS) et autorisez votre utilisateur. Activez aussi **Partage d'écran** (accès VNC au bureau macOS) — c'est votre filet de sécurité si un jour SSH ne suffit plus.
 
-> 🎉 **Félicitations !** Vous pouvez maintenant débrancher l'écran de Mirza. Il vole de ses propres ailes.
+>  **Félicitations !** Vous pouvez maintenant débrancher l'écran de Mirza. Il vole de ses propres ailes.
 
 ---
 
-## 🌐 Phase 2 — Configuration du Routeur / Box Internet
+##  Phase 2 — Configuration du Routeur / Box Internet
 
 Un serveur qui change d'IP à chaque redémarrage, c'est comme un chat qui change de nom tous les jours : personne ne s'y retrouve.
 
@@ -111,7 +111,7 @@ networksetup -getinfo Ethernet | grep "IP address:"
 
 ---
 
-## 🔑 Phase 3 — Première connexion
+## Phase 3 — Première connexion
 
 C'est le grand moment : vous allez parler à Mirza pour la première fois depuis votre poste client.
 
@@ -136,11 +136,11 @@ chmod -R +x mirza/
 ./mirza/mirza.sh
 ```
 
-> ✅ **C'est fait.** Mirza est configuré côté local. Vous disposez désormais d'un serveur distant pilotable en une commande. Les phases suivantes vont transformer cette petite boîte en véritable bête de course pour l'IA générative locale. Attachez vos ceintures.
+> **C'est fait.** Mirza est configuré côté local. Vous disposez désormais d'un serveur distant pilotable en une commande. Les phases suivantes vont transformer cette petite boîte en véritable bête de course pour l'IA générative locale. Attachez vos ceintures.
 
 ---
 
-## 📊 Phase 4 — Monitoring
+## Phase 4 — Monitoring
 
 Avant de se lancer tête baissée dans des modèles de 70 milliards de paramètres qui vont chatouiller les limites de votre RAM unifiée, il est **essentiel** de monitorer ce qui se passe sous le capot. Faire tourner un LLM sans monitoring, c'est comme conduire de nuit sans phares : techniquement possible, mais fortement déconseillé.
 
@@ -160,7 +160,7 @@ Bonne nouvelle : un script d'installation complet est fourni pour déployer tout
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 
 - [x] Configuration headless du Mac Mini
 - [x] Connexion SSH et outils CLI
@@ -172,7 +172,7 @@ Bonne nouvelle : un script d'installation complet est fourni pour déployer tout
 
 ---
 
-## 🤝 Contribuer
+## Contribuer
 
 Les contributions sont les bienvenues ! Si vous avez un Mac Mini qui prend la poussière et des idées pour l'exploiter, n'hésitez pas à ouvrir une **issue** ou une **pull request**.
 
