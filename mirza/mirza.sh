@@ -20,7 +20,9 @@ USER_SSH=$MIRZA_USER
 HOST=$MIRZA_HOST
 SSH_KEY="$HOME/.ssh/mirza_key"
 
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
+# Resolve real path even when called via symlink
+_REAL_SCRIPT=$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")
+SCRIPT_DIR=$(cd "$(dirname "$_REAL_SCRIPT")" &> /dev/null && pwd)
 REPO_DIR=$(cd "$SCRIPT_DIR/.." &> /dev/null && pwd)
 CONF_FILE="$SCRIPT_DIR/mirza.conf"
 MODELS_FILE="$REPO_DIR/mirzaServer/ai/models.json"
