@@ -1,252 +1,463 @@
-<!-- Shields / Badges -->
-<p align="center">
-  <img src="https://img.shields.io/badge/macOS-Tahoe_26.x-000000?style=for-the-badge&logo=apple&logoColor=white" />
-  <img src="https://img.shields.io/badge/Apple_Silicon-M1_|_M2_|_M3_|_M4-blue?style=for-the-badge&logo=apple&logoColor=white" />
-  <img src="https://img.shields.io/badge/Ubuntu-24.04_LTS-E95420?style=for-the-badge&logo=ubuntu&logoColor=white" />
-  <img src="https://img.shields.io/badge/Bash-5.2+-4EAA25?style=for-the-badge&logo=gnubash&logoColor=white" />
-  <img src="https://img.shields.io/badge/MLX-Apple_AI-e8722a?style=for-the-badge&logo=apple&logoColor=white" />
-  <img src="https://img.shields.io/badge/License-GPLv3-green?style=for-the-badge" />
-  <img src="https://img.shields.io/badge/Status-Work_In_Progress-orange?style=for-the-badge" />
-</p>
+# Mirza -- Station d'IA Locale sur Apple Silicon
 
-<h1 align="center"> Mirza — Station d'IA Locale sur Apple Silicon</h1>
-
-<p align="center">
-  <i>Transformez votre Mac Mini en bête de course dopée aux stéroïdes pour l'IA générative locale.</i><br/>
-  <i>Pas d'écran, pas de clavier, pas de nuage (c'est le cloud des autres).</i>
-</p>
+> Transformer un Mac Mini en serveur d'inference IA headless, pilote a distance depuis n'importe quel poste Linux.
+> Pas d'ecran, pas de clavier, pas d'abonnement cloud. Juste SSH, bash, et de la memoire unifiee.
 
 ---
 
-## 📖 Table des matières
+## Table des matieres
 
-- [Présentation](#-présentation)
-- [Prérequis](#-prérequis)
-- [Architecture](#-architecture)
-- [Phase 1 — Préparation de macOS](#-phase-1--préparation-de-macos-depuis-linterface-graphique)
-- [Phase 2 — Configuration du Routeur / Box Internet](#-phase-2--configuration-du-routeur--box-internet)
-- [Phase 3 — Première connexion](#-phase-3--première-connexion)
-- [Phase 4 — Monitoring](#-phase-4--monitoring)
-- [Phase 5 — Déploiement IA (MLX)](#-phase-5--déploiement-ia-mlx)
-- [Phase 6 — WebUI Chat](#-phase-6--webui-chat)
-- [Commandes CLI](#-commandes-cli)
-- [Roadmap](#-roadmap)
-- [Contribuer](#-contribuer)
-- [Licence](#-licence)
-
----
-
-## 🌟 Présentation
-
-**Mirza** documente — et automatise — la transformation complète d'un Mac Mini Apple Silicon (M1, M2, M3, M4…) qui passait sa vie à afficher des mails, en un **serveur d'inférence IA dédié**, puissant, réactif et surveillé à la culotte.
-Pourquoi le Mac Mini ? Parce que sa RAM unifiée fait pleurer les ingénieurs de chez Nvidia. Pourquoi en local ? Parce que payer 20 balles par mois pour qu'une IA dans le Nevada vous écrive une fonction `sqrt()` en Python, c'est surfait. 
-
-**L'objectif est simple :** brancher le Mac sur le réseau, jeter l'écran à la cave, et tout piloter à distance via SSH ou la superbe interface Web intégrée. Un peu comme un Tamagotchi, mais avec 32 Go de RAM unifiée et qui peut réellement vous aider à travailler.
-
-> **⚠️ Alerte Wi-Fi : Connexion filaire fortement recommandée.**
-> Ce guide présuppose que le serveur est branché en Ethernet. Le Wi-Fi, c'est sympa pour regarder Netflix sur les toilettes, mais pour un serveur d'IA, autant jouer à la roulette russe. Si vous insistez pour rester sans-fil, assumez votre latence et vos futurs regrets.
+- [C'est quoi ce projet](#cest-quoi-ce-projet)
+- [Prerequis](#prerequis)
+- [Structure du projet](#structure-du-projet)
+- [Phase 1 -- Preparation de macOS (ecran requis)](#phase-1----preparation-de-macos-ecran-requis)
+- [Phase 2 -- Configuration reseau](#phase-2----configuration-reseau)
+- [Phase 3 -- Installation du client](#phase-3----installation-du-client)
+- [Phase 4 -- Premier contact](#phase-4----premier-contact)
+- [Phase 5 -- Monitoring (Grafana + Prometheus)](#phase-5----monitoring-grafana--prometheus)
+- [Phase 6 -- Deploiement IA (MLX)](#phase-6----deploiement-ia-mlx)
+- [Phase 7 -- La WebUI](#phase-7----la-webui)
+- [Reference CLI](#reference-cli)
+- [Reference API](#reference-api)
+- [Emplacements des fichiers](#emplacements-des-fichiers)
+- [Depannage](#depannage)
+- [Roadmap](#roadmap)
+- [Licence](#licence)
 
 ---
 
-## 🛠 Prérequis
+## C'est quoi ce projet
 
-| Élément | Version / Détail |
+Mirza est un toolkit complet pour transformer un Mac Mini (ou n'importe quel Mac Apple Silicon, en fait) en **serveur d'inference IA dedie et headless**, que vous controlez entierement depuis une machine Linux distante.
+
+Le Mac est branche sur le reseau local en Ethernet, sans ecran. Vous le gerez via un CLI (`mirza`) et/ou une WebUI servie depuis votre machine cliente. Les modeles tournent en local grace au framework MLX d'Apple, qui exploite a fond l'architecture memoire unifiee. Aucune donnee ne quitte votre reseau. Pas de cle API requise. Juste des maths et du silicium.
+
+Le projet deploie aussi une stack de monitoring (Grafana + Prometheus + Macmon) pour que vous puissiez observer votre hardware transpirer en temps reel. Parce que si vous allez pousser 24 Go de memoire unifiee dans ses retranchements, autant regarder un graphique en meme temps.
+
+---
+
+## Prerequis
+
+| Composant | Exigence |
 |---|---|
-| **Machine cible** | Mac Mini Apple Silicon (M1 à M4). Si c'est un Intel, recyclez-le en chauffage d'appoint. |
-| **macOS** | Tahoe 26.x (la hype ou rien) |
-| **Machine cliente** | N'importe quel poste sous Linux/Ubuntu (pour de vrai, même Windows Subsystem for Linux fera l'affaire en pleurant un peu). |
-| **Bash** | 5.2+ (on ne vit pas dans le passé) |
+| **Machine cible** | N'importe quel Mac avec Apple Silicon (M1, M2, M3, M4). Un Mac Intel dans ce contexte, c'est un presse-papiers avec un logo pomme. |
+| **Version macOS** | Tahoe 26.x |
+| **Machine cliente** | Linux (Ubuntu 24.04 LTS teste). WSL2 fonctionne mais vous rappellera que c'est Windows a chaque occasion. |
+| **Bash** | 5.2+ |
 | **SSH** | OpenSSH 9.x |
-| **Réseau** | Un bon vieux câble RJ45 CAT6 minimum. |
-| **Patience** | Très utile, notamment lors du téléchargement d'Xcode (12 Go de bonheur). |
-| **Café / Boisson Énergétique** | Obligatoire pour la Phase 2. Prévoyez-en un pack. |
+| **Reseau** | Ethernet filaire, CAT6 minimum. Le Wi-Fi c'est pour YouTube, pas pour servir 9 milliards de parametres. |
+| **Patience** | Non negligeable. Xcode fait 12 Go. Les telecharges de modeles peuvent prendre des heures. |
 
 ---
 
-## 🏗 Architecture
-
-Voici l'ossature du projet (pour s'y retrouver un peu) :
+## Structure du projet
 
 ```text
 mirza.local/
-├── mirza/                        # 🖥  Outils côté client (votre poste Linux)
-│   ├── gatcha.sh                 #    Setup SSH + récupération des infos
-│   ├── mirza.sh                  #    CLI principal (13 commandes)
-│   ├── gen_config.sh             #    Générateur de configuration distante
-│   └── mirza.conf                #    Configuration auto-générée localement
-│
-├── mirzaServer/                  # 🍎 Scripts côté serveur (le Mac)
-│   ├── monitoring/
-│   │   ├── setup_monitoring.sh   #    Installation Grafana + Prometheus + macmon
-│   │   └── *.json                #    Dashboards Grafana pré-configurés
-│   ├── ai/
-│   │   ├── setup_mlx.sh          #    Installation uv + MLX + LaunchAgent
-│   │   └── models.json           #    Catalogue local et curation de modèles MLX
-│   └── utils/
-│       ├── baptism.sh            #    Renommage du serveur
-│       └── .zshrc                #    Configuration shell recommandée
-│
-├── webui/                        # 🌐 Interface de chat WebUI
-│   ├── index.html                #    Structure + settings modales + iframe Grafana
-│   ├── style.css                 #    Design system (dark + orange)
-│   ├── app.js                    #    Multi-provider, logic, streaming
-│   ├── server.py                 #    Serveur local et relais API SSH
-│   └── serve.sh                  #    Lancement local easy
-│
-├── docs/                         # 📚 Documentation
-│   └── MCP_ROADMAP.md            #    Roadmap du serveur MCP
-│
-├── README.md                     #    Lisez Moi (English version)
-├── readmeFR.md                   #    Ceci est la version dans la langue de Molière
-└── LICENSE                       #    Licence GPLv3
+|
+|-- mirza/                           Outils cote client (votre machine Linux)
+|   |-- mirza.sh                     CLI principal (15 commandes)
+|   |-- gatcha.sh                    Echange de cles SSH et setup environnement
+|   |-- gen_config.sh                Generateur de config distante (alimente mirza.conf via SSH)
+|   |-- mirza.conf                   Fichier de config auto-genere (ne pas editer manuellement)
+|
+|-- mirzaServer/                     Scripts cote serveur (deployes SUR le Mac)
+|   |-- monitoring/
+|   |   |-- setup_monitoring.sh      Installe Grafana, Prometheus, Macmon, configure crontab
+|   |   |-- *.json                   Definitions de dashboards Grafana pre-construits
+|   |-- ai/
+|   |   |-- setup_mlx.sh             Installe uv, MLX, mlx-lm, cree le LaunchAgent
+|   |   |-- models.json              Catalogue de modeles avec tiers RAM et categories
+|   |-- utils/
+|       |-- baptism.sh               Renomme le hostname du Mac
+|       |-- .zshrc                   Configuration shell recommandee pour le serveur
+|
+|-- webui/                           WebUI (tourne sur votre machine cliente)
+|   |-- index.html                   Layout : dashboard, chat, modeles, config, monitoring, docs
+|   |-- style.css                    Design system (theme sombre, accents violets)
+|   |-- app.js                       Logique applicative, integration API HuggingFace
+|   |-- server.py                    Backend Python (API REST, relais SSH, fichiers statiques)
+|   |-- serve.sh                     Script de demarrage rapide pour la WebUI
+|
+|-- docs/
+|   |-- MCP_ROADMAP.md               Roadmap pour l'integration Model Context Protocol
+|
+|-- installation.sh                  Setup client en une commande (deps, symlink, cles SSH, deploiement)
+|-- README.md                        Version anglaise
+|-- readmeFR.md                      Ce fichier
+|-- LICENSE                          GPLv3
 ```
 
 ---
 
-## 🍏 Phase 1 — Préparation de macOS (depuis l'interface graphique)
+## Phase 1 -- Preparation de macOS (ecran requis)
 
-L'heure de faire comprendre à macOS que ce n'est plus un ordinateur grand public mais une **bête de somme**. Il va falloir le sevrer de l'interface graphique. Délicatement.
+La seule fois ou vous aurez besoin d'un ecran branche au Mac. Savourez.
 
-### 1. Ne Jamais Fermer L'Œil
-Allez dans **Réglages Système** → **Écrans** → **Avancé…**
-Cochez la case **"Empêcher la suspension d'activité automatique."** Le repos, c'est pour les faibles.
+### 1. Empecher la mise en veille
 
-Ensuite, dans **Réglages Système** → **Énergie** :
-Activez **"Démarrer automatiquement après une panne de courant"** (sinon à quoi bon). Cochez aussi **"Réactiver lors d'un accès réseau"** pour lui balancer des datagrammes Wake-on-LAN au réveil.
+**Reglages Systeme > Ecrans > Avance...** -- Cochez "Empecher la suspension d'activite automatique lorsque l'ecran est eteint."
 
-### 2. Le Baptême (Identité Réseau)
-Dans **Réglages Système** → **Général** → **Partage** :
-En bas, sous *Nom d'hôte local*, cliquez sur *Modifier…* et tapez : `mirza`.
-Boum. Vous venez de créer `mirza.local`. Marre de copier coller des IPs comme `192.168.1.42`. 
+**Reglages Systeme > Energie** -- Activez "Demarrer automatiquement apres une panne de courant" et "Reactiver lors d'un acces reseau."
 
-### 3. Le Cordon Ombilical SSH
-Toujours dans les paramètres de Partage : Activez la **Session à distance** (le saint SSH d'Apple). Ajoutez votre profil. Cochez **Partage d'écran** si vous n'êtes pas hyper confiant dans vos talents SSH et que le VNC vous rassure la nuit.
+Le Mac ne doit jamais s'endormir tout seul. C'est un serveur maintenant. Il n'a plus ce droit.
 
-> **Bravo !** Vous pouvez le débrancher de l'écran. Il est libre. (Enfin, surtout esclave de vos futures requêtes LLM.)
+### 2. Definir le hostname
+
+**Reglages Systeme > General > Partage** -- En bas, sous "Nom d'hote local", cliquez "Modifier..." et mettez `mirza`.
+
+Cela cree `mirza.local` sur le reseau local via mDNS/Bonjour. Fini les adresses IP a retenir.
+
+### 3. Activer la connexion a distance
+
+Toujours dans Partage : activez **Session a distance** (c'est SSH). Ajoutez votre compte utilisateur a la liste des utilisateurs autorises.
+
+Optionnel : Activez le **Partage d'ecran** (VNC) si vous voulez un filet de securite pour les premiers jours. Vous arreterez de l'utiliser quand vous ferez confiance au CLI. Probablement.
+
+### 4. Installer Xcode
+
+Ouvrez l'App Store et telechargez Xcode. Ca fait environ 12 Go. Allez faire autre chose.
+
+Xcode est necessaire parce qu'Apple distribue la toolchain de compilation a l'interieur. `setup_mlx.sh` en a besoin pour compiler les packages Python avec le support Metal.
+
+Apres l'installation de Xcode, acceptez la licence depuis le terminal :
+
+```bash
+sudo xcodebuild -license accept
+```
+
+Vous pouvez maintenant debrancher l'ecran. Le Mac est lache dans la nature.
 
 ---
 
-## 🌐 Phase 2 — Configuration du Routeur / Box Internet
+## Phase 2 -- Configuration reseau
 
-Parce qu'un serveur qui chage d'IP à chaque boot, c'est comme essayer d'envoyer un colis à un agent secret amnésique.
+Un serveur qui change d'IP a chaque reboot, c'est un serveur que vous allez finir par detester.
 
-**Étape 1** — Piratez... pardon, connectez-vous légalement à l'IP de votre box (souvent le traditionnel `192.168.1.1`).
-**Étape 2** — Trouvez la section de Baux Statiques / DHCP. (Généralement cachée sous "Options Avancées" pour vous faire peur).
-**Étape 3** — Fixez l'IP (ex: `192.168.1.87`) pour l'adresse MAC de Mirza. Pour la connaitre, dans le terminal Mac :
-```bash
-networksetup -getmacaddress Ethernet
-```
-**Étape 4** — Si votre routeur a mal géré l'option **"IGMP Snooping"**, désactivez-la pour garantir que `mirza.local` réponde au mDNS.
-**Étape 5** — Ouvrez l'App Store et téléchargez Xcode. Prenez une douche, faites un marathon, revenez. Ça fait 12 Go. C'est le boss final de la consommation de données.
-
----
-
-## 🚀 Phase 3 — Première connexion
-
-Vous n'avez plus besoin d'écran. Votre clavier sans-fil logitech commence à prendre la poussière. Tout se passe de loin.
-
-```bash
-ssh votre_nom_user_mac@mirza.local
-```
-Si la connexion saute, c'est soit que votre box DHCP n'a pas pris effet, soit que vous avez oublié l'étape du Partage (Phase 1). Retournez brancher l'écran dans la honte.
-
-Une fois branché :
-1. Copiez vos clés SSH via `./mirza/gatcha.sh` (votre mot de passe vous énervera moins souvent).
-2. Lancez le setup :
-```bash
-./mirza/mirza.sh
-```
-Il installe le framework Mirza et ses alias magiques.
+1. Connectez-vous a l'interface d'administration de votre routeur (generalement `192.168.1.1`).
+2. Naviguez vers les parametres DHCP / Baux statiques.
+3. Attribuez une IP fixe (par exemple, `192.168.1.87`) a l'adresse MAC Ethernet du Mac.
+4. Pour trouver l'adresse MAC, executez ceci sur le Mac (avant de debrancher l'ecran) :
+   ```bash
+   networksetup -getmacaddress Ethernet
+   ```
+5. Si `mirza.local` ne resout pas apres un reboot, votre routeur fait peut-etre de l'IGMP Snooping. Desactivez-le.
 
 ---
 
-## 📊 Phase 4 — Monitoring (Grafana + Prometheus)
+## Phase 3 -- Installation du client
 
-Ouvrir l'IA sans monitoring, c'est traverser une autoroute les yeux bandés en criant YOLO.
-
-Heureusement, on déploie la *Sainte Trinité* du sysadmin: Grafana, Prometheus et Macmon (pour la puce M-series). Vous allez pouvoir scruter la moindre chauffe de votre GPU Unifié, et regarder votre SSD souffrir en temps réel ! 
-
-Installation :
-```bash
-# Entrez dans la matrice Mirza
-chmod +x mirzaServer/monitoring/setup_monitoring.sh
-./mirzaServer/monitoring/setup_monitoring.sh
-```
-*Note: Le script rajoutera les triggers adéquats via crontab `@reboot` pour que Homebrew lance les services sans vider la base Grafana ! La base de données Grafana se trouve à l'emplacement `/opt/homebrew/var/lib/grafana/grafana.db` sur le Mac.*
-
----
-
-## 🧠 Phase 5 — Déploiement IA (MLX)
-
-C'est là que la blague de serveur se transforme en IA sérieuse. Apple a sorti MLX, le PyTorch du pauvre mais extrêmement riche en performances Apple Silicon. Adieu Python qui crash, Bonjour **uv**, le gestionnaire d'environnement écrit en Rust (parce qu'il fallait bien de la rouille).
+Clonez le depot sur votre machine Linux :
 
 ```bash
-chmod +x mirzaServer/ai/setup_mlx.sh
-./mirzaServer/ai/setup_mlx.sh
+git clone <repo-url> ~/git/mirza.local
+cd ~/git/mirza.local
 ```
 
-**Où sont stockés les modèles sur mon Mac ?**
-L'outil mlx_lm tapera par défaut sous le capot via l'API Hugging Face. Les modèles sont donc stockés et cachés dans : `~/.cache/huggingface/hub/` sur votre Mac. Vous savez où nettoyer en cas de disque saturé...
+Lancez le script d'installation :
 
-L'outil `mlx-lm` lance une API *100% compatible OpenAI* en local au port 8080.
-Pour tester :
 ```bash
-mirza models      # Montrez-moi ce qu'on a en magasin
-mirza deploy nom_modele # Téléchargement depuis les tréfonds de HuggingFace
-mirza serve       # IT'S ALIVE!
+chmod +x installation.sh
+./installation.sh
 ```
 
----
+Ce script fait quatre choses, dans l'ordre :
 
-## 🖥 Phase 6 — WebUI Chat
-
-Vous vouliez l'interface de ChatGPT mais... chez vous, pour vous, et qui ne vend pas vos données ? On l'a fait. L'interface Mirza AI est un petit chef-d'œuvre de HTML/JS (zéro dépendance Node/NPM, parce qu'on aime les choses propres).
-
-- 💬 **Streaming en direct** : Voyez les tokens s'afficher plus vite que vous ne lisez.
-- 🎨 **UI soignée** avec mode sombre.
-- 📈 **Grafana** : Intégration totale en iframe ; vous verrez les datas Macmon de `mirza.local` directement depuis la navigation gauche.
-- 🔧 **Multi-providers** et **Model Context Protocol (MCP)** supportés.
-
-**Démarrage Express :**
-```bash
-mirza ui # Sur votre client local
-```
-Allez sur `http://localhost:3333` et amusez-vous.
-
----
-
-## ⌨ Commandes CLI de BG
-
-| Commande `mirza` | Action héroïque |
+| Etape | Ce que ca fait |
 |---|---|
-| `start` | Envoie un jet d'eau Wake-on-LAN au Mac endormi. |
-| `ssh` | Pour les vrais. |
-| `status` | Est-ce que ça marche ou ça cramé ? |
-| `config` | Affiche ou régénère le fichier de configuration de l'infrastructure |
-| `models` / `deploy` | Fait vos courses chez HuggingFace. |
-| `serve` / `stop` | Pilote l'hôte MLX à distance. |
-| `ui` | Déploie la Batmobile (Interface Web). |
+| **1. Dependances** | Installe `jq`, `curl`, `wakeonlan`, `python3`, `ssh` via votre gestionnaire de paquets. |
+| **2. Symlink CLI** | Cree `~/.local/bin/mirza` pointant vers `mirza/mirza.sh`. Ajoute `~/.local/bin` au PATH si necessaire. |
+| **3. Cles SSH** | Execute optionnellement `gatcha.sh` pour generer une paire de cles SSH dedies (`~/.ssh/mirza_key`) et la copier sur le Mac. Injecte aussi `MIRZA_HOST`, `MIRZA_USER` et `MIRZA_MAC_ADRESS` dans votre `~/.bashrc`. |
+| **4. Deploiement serveur** | Copie optionnellement `mirzaServer/` vers `~/mirzaServer/` sur le Mac via rsync. |
+
+Apres la fin du script :
+
+```bash
+source ~/.bashrc
+mirza status
+```
+
+Si vous voyez "ONLINE", c'est parti.
 
 ---
 
-## 📝 Roadmap
+## Phase 4 -- Premier contact
 
-Parce qu'on s'ennuie vite :
-- [x] Outils CLI pour fainéants
-- [x] Monitoring ultra performant (merci Macmon)
-- [x] Serveur API OpenAI compatible
-- [x] Web UI sans le bloatware React
-- [x] Grafana intégré à l'UI 😎
-- [ ] Outils complets pour agentic workflow (Agent MCP, Web Search)
-- [ ] Benchmarking (Histoire de justifier le prix du M4 Pro à sa moitié)
+```bash
+mirza ssh
+```
 
----
+Vous etes maintenant sur le Mac. Lancez les scripts de setup serveur dans l'ordre.
 
-## 🤝 Contribuer
+### Renommer l'hote (optionnel, si pas deja fait)
 
-Vous avez écrit un script Bash plus propre que le mien ? (C'est pas dur). Vous voulez rajouter du tailscale ? Faites péter la **Pull Request**. On est sympas, on mord pas (sauf si vous n'avez pas rebase).
+```bash
+chmod +x ~/mirzaServer/utils/baptism.sh
+~/mirzaServer/utils/baptism.sh
+```
 
 ---
 
-## 📄 Licence
-Licence **GPLv3**. Copiez, distribuez, modifiez, mais laissez les droits ouverts et citez vos sources sinon le karma (et Richard Stallman) vous rattrapera.
+## Phase 5 -- Monitoring (Grafana + Prometheus)
+
+Faire de l'inference sans monitoring, c'est du deni. La stack :
+
+| Composant | Port | Role |
+|---|---|---|
+| **Grafana** | 3000 | Visualisation des dashboards |
+| **Prometheus** | 9090 | Collecte et stockage des metriques |
+| **Macmon** | 9091 | Exporteur de metriques Apple Silicon (CPU, GPU, ANE, temperature, puissance) |
+
+### Installation (sur le Mac, via SSH)
+
+```bash
+chmod +x ~/mirzaServer/monitoring/setup_monitoring.sh
+~/mirzaServer/monitoring/setup_monitoring.sh
+```
+
+Ce script :
+- Installe Grafana, Prometheus et Macmon via Homebrew.
+- Configure Prometheus pour scraper les metriques Macmon.
+- Importe un dashboard Grafana pre-construit ("Mirza Monitor Lite").
+- Ajoute des entrees crontab `@reboot` pour que tous les services demarrent automatiquement apres un reboot. Pas d'intervention manuelle.
+
+### Emplacement de la base de donnees Grafana
+
+La base de donnees Grafana (dashboards, utilisateurs, preferences) est stockee a l'emplacement :
+
+```
+/opt/homebrew/var/lib/grafana/grafana.db
+```
+
+Si vous devez faire un backup ou reset Grafana, c'est ce fichier.
+
+### Acceder a Grafana
+
+Depuis votre navigateur : `http://mirza.local:3000`
+
+Depuis la WebUI : l'onglet Monitoring integre Grafana directement via iframe en mode kiosk.
+
+---
+
+## Phase 6 -- Deploiement IA (MLX)
+
+MLX est le framework de machine learning d'Apple, optimise pour Apple Silicon. Il utilise la memoire unifiee, ce qui signifie que le GPU, le CPU et le Neural Engine partagent tous le meme pool de RAM. Pas de goulot d'etranglement PCIe. Pas de limite VRAM separee de la RAM systeme.
+
+### Installation (sur le Mac, via SSH)
+
+```bash
+chmod +x ~/mirzaServer/ai/setup_mlx.sh
+~/mirzaServer/ai/setup_mlx.sh
+```
+
+Cela installe :
+- **uv** : un gestionnaire de paquets Python en Rust. Rapide. Tres rapide.
+- **MLX et mlx-lm** : le moteur d'inference et sa couche de serving LLM.
+- Un LaunchAgent pour le demarrage automatique du serveur.
+
+### Ou sont stockes les modeles ?
+
+`mlx-lm` utilise le cache Hugging Face. Tous les modeles telecharges atterrissent dans :
+
+```
+~/.cache/huggingface/hub/
+```
+
+sur le Mac. C'est la que part votre espace disque.
+
+### Gerer les modeles depuis le CLI
+
+```bash
+mirza models              # Lister les modeles compatibles depuis le catalogue
+mirza models code         # Filtrer par categorie
+mirza deploy qwen3.5-9b-4bit  # Telecharger un modele sur le Mac
+mirza serve qwen3.5-9b-4bit   # Demarrer le serveur d'inference avec ce modele
+mirza stop                # Arreter le serveur d'inference
+```
+
+### L'API d'inference
+
+`mlx-lm` sert une **API REST compatible OpenAI** sur le port 8080. Vous pouvez l'utiliser avec n'importe quel outil qui parle le protocole OpenAI :
+
+```bash
+curl http://mirza.local:8080/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model": "mlx-community/Qwen3.5-9B-MLX-4bit", "messages": [{"role": "user", "content": "Bonjour"}]}'
+```
+
+---
+
+## Phase 7 -- La WebUI
+
+La WebUI est une application single-page servie depuis votre machine cliente. Elle communique avec le Mac via le backend Python (`server.py`), qui relaie les commandes par SSH.
+
+### Demarrer la WebUI
+
+```bash
+mirza ui
+```
+
+Cela demarre `server.py` sur le port 3333 et cree un tunnel SSH vers l'API MLX si necessaire.
+
+Ouvrez `http://localhost:3333` dans votre navigateur.
+
+### Arreter la WebUI
+
+```bash
+mirza stop-ui
+```
+
+### Fonctionnalites de la WebUI
+
+| Onglet | Ce qu'il fait |
+|---|---|
+| **Dashboard** | Statut du serveur, infos hardware, modele actif, actions rapides (reveil, veille, reboot, stop MLX), logs en direct. |
+| **Chat** | Interface de chat complete avec streaming, support multi-provider (MLX local, OpenAI, Anthropic, Groq, Mistral, Ollama), historique des conversations, outils MCP. |
+| **Modeles** | Catalogue en direct depuis l'API HuggingFace (mlx-community, top 100 par telechargements). Chaque carte affiche : taille estimee, overhead KV cache, 6 Go d'overhead OS, tok/s estimes pour votre puce, support Flash/Paged Attention, et avertissements de compatibilite. |
+| **Config** | Affiche le contenu de `mirza.conf`. Peut regenerer la config via SSH. |
+| **Monitoring** | Dashboard Grafana integre en mode kiosk. |
+| **Documentation** | Guide d'utilisation integre. |
+
+### Comment marchent les recommandations de modeles
+
+La WebUI parse le nom de chaque modele pour en extraire les parametres (ex: "9B") et la quantification (ex: "4bit"), puis calcule :
+
+1. **Taille des poids du modele** = Parametres x (Bits / 8)
+2. **Estimation du KV Cache** = 1.5 Go (petits modeles) ou 3 Go (modeles > 15B parametres)
+3. **Overhead OS** = 6 Go (reserves pour macOS et les processus de fond)
+4. **RAM minimum requise** = Taille des poids + KV Cache + Overhead OS
+5. **tok/s estimes** = Bande passante memoire de la puce / Taille des poids du modele
+
+Les modeles qui ne rentrent pas dans votre RAM sont grises avec des boutons desactives. Les modeles adaptes a votre hardware sont tagges "Optimise pour ce Mac."
+
+---
+
+## Reference CLI
+
+Toutes les commandes utilisent le format `mirza <commande> [arguments]`.
+
+### Gestion du serveur
+
+| Commande | Description |
+|---|---|
+| `mirza start` | Envoyer un paquet Wake-on-LAN au Mac. |
+| `mirza ssh` | Ouvrir une session SSH interactive. |
+| `mirza status` | Verifier si le serveur, l'API MLX et Grafana fonctionnent. |
+| `mirza sleep` | Mettre le Mac en veille via `pmset sleepnow`. |
+| `mirza reboot` | Redemarrer le Mac via `sudo shutdown -r now`. |
+
+### Gestion de l'IA
+
+| Commande | Description |
+|---|---|
+| `mirza models [categorie]` | Afficher le catalogue de modeles, filtre par compatibilite RAM. Categories : `general`, `code`, `reasoning`, `multimodal`, `light`, `french`. |
+| `mirza deploy <model_id>` | Telecharger un modele sur le Mac (accepte les IDs du catalogue ou les chemins complets de depots HuggingFace). |
+| `mirza serve [model_id]` | Demarrer le serveur d'inference MLX. Utilise le dernier modele deploye si aucun n'est specifie. |
+| `mirza stop` | Arreter le serveur d'inference MLX. |
+| `mirza chat` | Session de chat interactive en terminal. |
+
+### Interface et Configuration
+
+| Commande | Description |
+|---|---|
+| `mirza ui` | Lancer la WebUI sur le port 3333. Cree un tunnel SSH si necessaire. |
+| `mirza stop-ui` | Arreter le processus WebUI. |
+| `mirza tunnel [port]` | Creer un tunnel SSH vers l'API MLX (par defaut : port 8080). |
+| `mirza config` | Afficher la configuration actuelle. |
+| `mirza config --refresh` | Regenerer `mirza.conf` en interrogeant le Mac via SSH. |
+
+---
+
+## Reference API
+
+Le backend de la WebUI (`server.py`) expose ces endpoints :
+
+| Methode | Endpoint | Description |
+|---|---|---|
+| GET | `/api/status` | Statut du serveur, infos hardware, modele actif. |
+| GET | `/api/config` | Contenu de `mirza.conf` en JSON. |
+| POST | `/api/config/refresh` | Regenerer `mirza.conf` via SSH. |
+| GET | `/api/models` | Catalogue de modeles depuis `models.json`. |
+| POST | `/api/server/wake` | Envoyer un paquet Wake-on-LAN. |
+| POST | `/api/server/sleep` | Mettre le Mac en veille. |
+| POST | `/api/server/reboot` | Redemarrer le Mac. |
+| POST | `/api/mlx/serve` | Demarrer le serveur MLX avec `{"model": "repo/name"}`. |
+| POST | `/api/mlx/stop` | Arreter le serveur MLX. |
+| POST | `/api/mlx/deploy` | Telecharger un modele avec `{"hf_repo": "repo/name"}`. |
+| GET | `/api/mlx/logs` | 30 dernieres lignes du log du serveur MLX. |
+
+---
+
+## Emplacements des fichiers
+
+| Quoi | Ou | Machine |
+|---|---|---|
+| Script CLI | `mirza/mirza.sh` | Client (Linux) |
+| Symlink CLI | `~/.local/bin/mirza` | Client (Linux) |
+| Configuration | `mirza/mirza.conf` | Client (Linux) |
+| Cle SSH privee | `~/.ssh/mirza_key` | Client (Linux) |
+| Variables d'environnement | `~/.bashrc` (MIRZA_HOST, MIRZA_USER, MIRZA_MAC_ADRESS) | Client (Linux) |
+| Backend WebUI | `webui/server.py` | Client (Linux) |
+| Catalogue de modeles | `mirzaServer/ai/models.json` | Les deux |
+| Modeles telecharges | `~/.cache/huggingface/hub/` | Serveur (Mac) |
+| Base de donnees Grafana | `/opt/homebrew/var/lib/grafana/grafana.db` | Serveur (Mac) |
+| Donnees Prometheus | `/opt/homebrew/var/prometheus/` | Serveur (Mac) |
+| Logs du serveur MLX | `/tmp/mirza-mlx.log` | Serveur (Mac) |
+| Setup monitoring | `~/mirzaServer/monitoring/setup_monitoring.sh` | Serveur (Mac) |
+
+---
+
+## Depannage
+
+### "mirza: command not found"
+
+Le symlink `~/.local/bin/mirza` n'est pas dans votre PATH. Lancez :
+```bash
+source ~/.bashrc
+```
+
+### "Catalogue non trouve: .../.local/mirzaServer/ai/models.json"
+
+Vous utilisez une ancienne version de `mirza.sh` qui ne resout pas les symlinks correctement. Mettez a jour et relancez `installation.sh`.
+
+### "Address already in use" au demarrage de la WebUI
+
+Un processus `server.py` precedent tourne encore. Tuez-le :
+```bash
+mirza stop-ui
+```
+
+### mirza.local ne resout pas
+
+- Verifiez que le Mac est allume et connecte en Ethernet.
+- Verifiez que votre routeur ne filtre pas le mDNS (verifiez l'IGMP Snooping).
+- En dernier recours, utilisez l'IP statique du Mac directement.
+
+### Grafana est vide apres un reboot
+
+Le script `setup_monitoring.sh` installe des entrees crontab `@reboot`. Si elles sont manquantes, relancez le script. Il ne supprimera pas les donnees Grafana existantes.
+
+### Les modeles sont trop lents
+
+Verifiez `mirza status` pour confirmer que le modele tourne. Puis verifiez Grafana pour la pression memoire. Si le Mac swappe, le modele est trop gros pour votre RAM. Utilisez une quantification plus petite ou un modele plus petit.
+
+---
+
+## Roadmap
+
+- [x] CLI pour la gestion distante du Mac
+- [x] Stack de monitoring (Grafana + Prometheus + Macmon)
+- [x] API d'inference compatible OpenAI (mlx-lm)
+- [x] WebUI avec chat, dashboard, catalogue de modeles
+- [x] Grafana integre dans la WebUI
+- [x] Catalogue de modeles dynamique depuis l'API HuggingFace
+- [x] Recommandations de modeles basees sur le hardware avec estimation tok/s
+- [ ] Serveur MCP pour workflows agentiques (filesystem, recherche web, execution de code)
+- [ ] Benchmarking de modeles a travers les variantes de puces (M1 a M4 Ultra)
+- [ ] Serving multi-modeles (servir plusieurs modeles sur des ports differents)
+
+---
+
+## Licence
+
+GPLv3. Copiez, distribuez, modifiez. Gardez-le ouvert.
