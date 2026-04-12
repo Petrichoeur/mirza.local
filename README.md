@@ -239,7 +239,7 @@ Because we get bored easily:
 - [x] WebUI without the bloated React boilerplate
 - [x] Integrated Grafana right in the UI 😎
 - [ ] Complete Agentic Workflows (MCP Agents, Web Search)
-- [ ] Benchmarks (so you can justify buying the M4 Pro to your wife/husband)
+- [ ] Benchmarks (so you can justify buying the M4 Pro to your partner)
 
 ---
 

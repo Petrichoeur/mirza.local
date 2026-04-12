@@ -429,8 +429,17 @@ cmd_ui() {
 
     # Start local web server
     cd "$WEBUI_DIR"
-    python3 -m http.server 3333
+    python3 server.py
 
+}
+
+cmd_stop_ui() {
+    echo -e "${YELLOW}[■] Arrêt de la WebUI Mirza...${NC}"
+    if pkill -f "python3 server.py" 2>/dev/null || pkill -f "python3 -m http.server 3333" 2>/dev/null; then
+        echo -e "${GREEN}  ✓ WebUI arrêtée.${NC}"
+    else
+        echo -e "${DIM}  Aucune WebUI Mirza en cours d'exécution.${NC}"
+    fi
 }
 
 cmd_help() {
@@ -451,6 +460,7 @@ cmd_help() {
     echo ""
     echo -e "  ${BOLD}Interface & Config${NC}"
     echo -e "    ${CYAN}mirza ui${NC}                 Lancer la WebUI de chat"
+    echo -e "    ${CYAN}mirza stop-ui${NC}            Arrêter la WebUI locale"
     echo -e "    ${CYAN}mirza tunnel${NC} [port]       Tunnel SSH vers l'API MLX"
     echo -e "    ${CYAN}mirza config${NC}             Afficher la configuration"
     echo -e "    ${CYAN}mirza config --refresh${NC}   Régénérer la configuration via SSH"
@@ -474,6 +484,7 @@ case "$1" in
     chat)           cmd_chat ;;
     tunnel)         cmd_tunnel "$@" ;;
     ui)             cmd_ui "$@" ;;
+    stop-ui)        cmd_stop_ui ;;
     help|--help|-h) cmd_help ;;
     *)              cmd_help ;;
 esac

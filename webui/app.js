@@ -352,7 +352,7 @@ async function loadDashboard() {
         }
 
         // Update Grafana iframe (always use mirza.local for reliable access)
-        const grafanaUrl = `http://${data.host || 'mirza.local'}:3000`;
+        const grafanaUrl = `http://${data.host || 'mirza.local'}:3000/d/ad5vxgh/mirza-monitor-lite?kiosk`;
         const iframe = document.getElementById('grafana-iframe');
         if (iframe && iframe.src !== grafanaUrl && iframe.src !== grafanaUrl + '/') {
             iframe.src = grafanaUrl;
@@ -451,8 +451,27 @@ function renderFilteredModels() {
 
     dom.modelsGrid.innerHTML = '';
     models.forEach(m => {
+        let isRecommended = m.recommended || false;
+        let isUnsupported = false;
+        let warningText = '';
+        
+        const macRam = state.dashboardData?.hardware?.ram_gb;
+        if (macRam) {
+            if (macRam < m.min_ram_gb) {
+                isUnsupported = true;
+                isRecommended = false;
+                warningText = `<span class="model-tag" style="background:var(--color-danger);color:white">RAM Insuffisante (${m.min_ram_gb}Go requis)</span>`;
+            } else {
+                // If it fits well in RAM, auto-recommend it
+                if (macRam - m.min_ram_gb <= 12 && macRam - m.min_ram_gb >= 0) {
+                    isRecommended = true;
+                }
+            }
+        }
+
         const card = document.createElement('div');
-        card.className = `model-card${m.recommended ? ' recommended' : ''}`;
+        card.className = `model-card${isRecommended ? ' recommended' : ''}${isUnsupported ? ' unsupported' : ''}`;
+        if(isUnsupported) card.style.opacity = "0.6";
 
         const catTags = (m.categories || []).map(c => {
             const cat = categories[c];
@@ -462,7 +481,7 @@ function renderFilteredModels() {
         card.innerHTML = `
             <div class="model-card-header">
                 <div class="model-card-name">${escapeHtml(m.name)}</div>
-                ${m.recommended ? '<span class="model-tag star">⭐ Recommandé</span>' : ''}
+                ${isRecommended ? '<span class="model-tag star">⭐ Recommandé pour ce Mac</span>' : ''}
             </div>
             <div class="model-card-family">${escapeHtml(m.family)} · ${m.parameters} · ${m.quantization}</div>
             <div class="model-card-desc">${escapeHtml(m.description)}</div>
@@ -470,12 +489,13 @@ function renderFilteredModels() {
                 <span class="model-tag size">${m.size_gb} Go</span>
                 <span class="model-tag">RAM ≥ ${m.min_ram_gb} Go</span>
                 ${catTags}
+                ${warningText}
             </div>
             <div class="model-card-footer">
                 <span class="model-card-stats">↓ ${(m.downloads || 0).toLocaleString()}</span>
                 <div style="display:flex;gap:6px;">
-                    <button class="model-btn model-btn-deploy" onclick="deployModel('${escapeHtml(m.hf_repo)}')">Télécharger</button>
-                    <button class="model-btn model-btn-serve" onclick="serveModel('${escapeHtml(m.hf_repo)}')">Servir</button>
+                    <button class="model-btn model-btn-deploy" ${isUnsupported ? 'disabled style="cursor:not-allowed;"' : ''} onclick="deployModel('${escapeHtml(m.hf_repo)}')">Télécharger</button>
+                    <button class="model-btn model-btn-serve" ${isUnsupported ? 'disabled style="cursor:not-allowed;"' : ''} onclick="serveModel('${escapeHtml(m.hf_repo)}')">Servir</button>
                 </div>
             </div>
         `;
