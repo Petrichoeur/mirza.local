@@ -1,32 +1,32 @@
 /* ═══════════════════════════════════════════════════════════════
    Mirza AI — Design System
-   Dark theme with orange accents (cohérent avec le prompt zsh %F{166})
+   Dark theme with Violet accents (Proper CSS Tokens)
    ═══════════════════════════════════════════════════════════════ */
 
 /* --- CSS Custom Properties / Design Tokens --- */
 :root {
     /* --- Palette --- */
-    --color-bg-primary:       #0d0d0f;
-    --color-bg-secondary:     #141418;
-    --color-bg-tertiary:      #1a1a21;
-    --color-bg-elevated:      #1f1f28;
-    --color-bg-hover:         #25252f;
-    --color-bg-active:        #2a2a36;
+    --color-bg-primary:       #0b0a10;
+    --color-bg-secondary:     #12101a;
+    --color-bg-tertiary:      #1a1726;
+    --color-bg-elevated:      #211e30;
+    --color-bg-hover:         #29253d;
+    --color-bg-active:        #322c4a;
 
-    --color-surface:          #18181e;
-    --color-surface-hover:    #22222a;
-    --color-surface-border:   #2a2a35;
+    --color-surface:          #161320;
+    --color-surface-hover:    #1e1a2c;
+    --color-surface-border:   #2a243d;
 
-    --color-text-primary:     #e8e8ed;
-    --color-text-secondary:   #9d9daa;
-    --color-text-tertiary:    #6a6a78;
-    --color-text-inverse:     #0d0d0f;
+    --color-text-primary:     #ece9f2;
+    --color-text-secondary:   #a5a1b3;
+    --color-text-tertiary:    #736f82;
+    --color-text-inverse:     #0b0a10;
 
-    /* Orange accent (166 ANSI ≈ #d75f00, on warm it up) */
-    --color-accent:           #e8722a;
-    --color-accent-hover:     #f0853f;
-    --color-accent-subtle:    rgba(232, 114, 42, 0.12);
-    --color-accent-glow:      rgba(232, 114, 42, 0.25);
+    /* Violet accent */
+    --color-accent:           #a855f7;
+    --color-accent-hover:     #c084fc;
+    --color-accent-subtle:    rgba(168, 85, 247, 0.15);
+    --color-accent-glow:      rgba(168, 85, 247, 0.35);
 
     --color-success:          #34d399;
     --color-warning:          #fbbf24;
