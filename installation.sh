@@ -96,7 +96,7 @@ fi
 
 # 4. Gatcha (Configuration des clés SSH si nécessaire)
 echo ""
-echo -e "${YELLOW}[3/3] Autorisation SSH (Gatcha)...${NC}"
+echo -e "${YELLOW}[3/4] Autorisation SSH (Gatcha)...${NC}"
 GATCHA_SH="$SCRIPT_DIR/mirza/gatcha.sh"
 if [ -f "$GATCHA_SH" ]; then
     chmod +x "$GATCHA_SH"
@@ -109,10 +109,57 @@ if [ -f "$GATCHA_SH" ]; then
     fi
 fi
 
+# 5. Déploiement du dossier serveur
+echo ""
+echo -e "${YELLOW}[4/4] Déploiement des scripts serveurs vers le Mac...${NC}"
+echo -e " Voulez-vous copier le dossier 'mirzaServer/' sur le Mac distant maintenant ? (O/n)"
+read -r deploy_resp
+if [[ "$deploy_resp" =~ ^([oO][uU][iI]|[oO]|yes|y|Y)$ ]] || [[ -z "$deploy_resp" ]]; then
+    # Charger les variables fraichement injectées par Gatcha si elles existent
+    if [ -f "$HOME/.bashrc" ]; then
+        source "$HOME/.bashrc"
+    fi
+    
+    # Si non détectées, on demande
+    TARGET_USER="${MIRZA_USER}"
+    TARGET_HOST="${MIRZA_HOST}"
+    
+    if [[ -z "$TARGET_USER" || -z "$TARGET_HOST" ]]; then
+        echo -e " ➜ Quel est l'utilisateur SSH du Mac distant ? (ex: mirza)"
+        read -r TARGET_USER
+        echo -e " ➜ Quel est le hostname ou l'IP du Mac distant ? (ex: mirza.local)"
+        read -r TARGET_HOST
+    fi
+    
+    if [ -n "$TARGET_USER" ] && [ -n "$TARGET_HOST" ]; then
+        if command -v rsync >/dev/null 2>&1; then
+            echo -e " ${CYAN}Synchronisation (rsync) vers ${TARGET_USER}@${TARGET_HOST}:~/mirzaServer/...${NC}"
+            rsync -avz "$SCRIPT_DIR/mirzaServer/" "${TARGET_USER}@${TARGET_HOST}:~/mirzaServer/"
+            echo -e "${GREEN} -> Fichiers copiés avec succès !${NC}"
+        else
+            echo -e " ${CYAN}Copie (scp) vers ${TARGET_USER}@${TARGET_HOST}:~/...${NC}"
+            scp -r "$SCRIPT_DIR/mirzaServer" "${TARGET_USER}@${TARGET_HOST}:~/"
+            echo -e "${GREEN} -> Fichiers copiés avec succès !${NC}"
+        fi
+    else
+        echo -e "${RED} -> Utilisateur ou hôte manquant, déploiement annulé.${NC}"
+    fi
+else
+    echo " -> Déploiement ignoré."
+fi
+
 echo ""
 echo -e "${GREEN}======================================================${NC}"
-echo -e "${GREEN}     Installation Client Validée ! 🚀                 ${NC}"
+echo -e "${GREEN}     Installation Complète Validée ! 🚀               ${NC}"
 echo -e "${GREEN}======================================================${NC}"
 echo -e "Vous pouvez maintenant piloter votre Mac depuis n'importe où :"
-echo -e "  Tapez:  ${CYAN}mirza status${NC}"
-echo -e "  Tapez:  ${CYAN}mirza ui${NC}       (pour lancer l'interface)"
+echo ""
+echo -e "${YELLOW} -> Rechargement de l'environnement Bash...${NC}"
+# Sourcing bashrc inside the script only affects the script process itself
+# We include it and also remind the user.
+if [ -f "$HOME/.bashrc" ]; then
+    source "$HOME/.bashrc"
+fi
+
+echo -e "  ➜ ${BOLD}IMPORTANT${NC}: Pour activer les commandes immédiatement, tapez : ${CYAN}source ~/.bashrc${NC}"
+echo -e "                     ou redémarrez votre terminal."
