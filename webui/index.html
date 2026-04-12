@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mirza AI — Chat</title>
+    <meta name="description" content="Interface de chat pour Mirza, votre station d'IA locale sur Apple Silicon.">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <!-- Markdown + Syntax Highlighting (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js"></script>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- SIDEBAR                                            -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <span class="logo-icon">◈</span>
+                <span class="logo-text">Mirza</span>
+                <span class="logo-badge">AI</span>
+            </div>
+            <button class="btn-icon" id="btn-new-chat" title="Nouvelle conversation">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+        </div>
+
+        <!-- Conversations list -->
+        <div class="sidebar-conversations">
+            <div class="sidebar-section-label">Conversations</div>
+            <div id="conversations-list" class="conversations-list">
+                <!-- Populated by JS -->
+            </div>
+        </div>
+
+        <!-- Server info panel -->
+        <div class="sidebar-footer">
+            <div class="server-status" id="server-status">
+                <div class="status-dot" id="status-dot"></div>
+                <span id="status-text">Connexion...</span>
+            </div>
+            <div class="model-selector">
+                <label for="model-select">Modèle actif</label>
+                <select id="model-select" class="select-model">
+                    <option value="">Chargement...</option>
+                </select>
+            </div>
+            <div class="sidebar-links">
+                <a href="#" id="link-grafana" class="sidebar-link" target="_blank" title="Ouvrir Grafana">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                    Monitoring
+                </a>
+                <button class="sidebar-link" id="btn-settings" title="Paramètres">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                    Paramètres
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Sidebar toggle for mobile -->
+    <button class="sidebar-toggle" id="sidebar-toggle">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+    </button>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- MAIN CHAT AREA                                     -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <main class="chat-main" id="chat-main">
+
+        <!-- Empty state / Welcome -->
+        <div class="welcome-screen" id="welcome-screen">
+            <div class="welcome-logo">◈</div>
+            <h1>Mirza AI</h1>
+            <p class="welcome-subtitle">Votre station d'IA locale sur Apple Silicon</p>
+            <div class="welcome-suggestions">
+                <button class="suggestion-chip" data-prompt="Explique-moi comment fonctionne le machine learning en termes simples.">
+                    <span class="chip-icon">💡</span>
+                    Expliquer le ML simplement
+                </button>
+                <button class="suggestion-chip" data-prompt="Écris un script Python qui analyse un fichier CSV et génère un graphique.">
+                    <span class="chip-icon">💻</span>
+                    Script Python pour CSV
+                </button>
+                <button class="suggestion-chip" data-prompt="Quels sont les avantages de l'inférence IA locale par rapport au cloud ?">
+                    <span class="chip-icon">🏠</span>
+                    IA locale vs Cloud
+                </button>
+                <button class="suggestion-chip" data-prompt="Rédige un email professionnel pour proposer une collaboration sur un projet open-source.">
+                    <span class="chip-icon">✉️</span>
+                    Email professionnel
+                </button>
+            </div>
+        </div>
+
+        <!-- Messages container -->
+        <div class="messages-container" id="messages-container">
+            <div class="messages-scroll" id="messages-scroll">
+                <!-- Messages populated by JS -->
+            </div>
+        </div>
+
+        <!-- Input area -->
+        <div class="input-area" id="input-area">
+            <div class="input-wrapper">
+                <textarea
+                    id="message-input"
+                    class="message-input"
+                    placeholder="Envoyer un message à Mirza..."
+                    rows="1"
+                    autofocus
+                ></textarea>
+                <div class="input-actions">
+                    <span class="token-counter" id="token-counter"></span>
+                    <button class="btn-send" id="btn-send" title="Envoyer (Entrée)">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="input-footer">
+                <span class="input-hint">Entrée pour envoyer · Shift+Entrée pour un saut de ligne</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- SETTINGS MODAL                                     -->
+    <!-- ═══════════════════════════════════════════════════ -->
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <h2>Paramètres</h2>
+                <button class="btn-icon" id="btn-close-settings">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-group">
+                    <label for="setting-endpoint">Endpoint API</label>
+                    <input type="text" id="setting-endpoint" class="setting-input" value="http://localhost:8080" />
+                    <span class="setting-hint">URL du serveur MLX (ex: http://mirza.local:8080)</span>
+                </div>
+                <div class="setting-group">
+                    <label for="setting-temperature">Température</label>
+                    <div class="setting-range-row">
+                        <input type="range" id="setting-temperature" min="0" max="2" step="0.1" value="0.7" />
+                        <span id="temperature-value">0.7</span>
+                    </div>
+                    <span class="setting-hint">Plus haut = plus créatif, plus bas = plus factuel</span>
+                </div>
+                <div class="setting-group">
+                    <label for="setting-max-tokens">Tokens max</label>
+                    <input type="number" id="setting-max-tokens" class="setting-input" value="4096" min="64" max="32768" />
+                    <span class="setting-hint">Longueur maximale de la réponse</span>
+                </div>
+                <div class="setting-group">
+                    <label for="setting-system-prompt">System prompt</label>
+                    <textarea id="setting-system-prompt" class="setting-textarea" rows="4" placeholder="Instructions système optionnelles...">Tu es Mirza, un assistant IA intelligent et serviable. Tu réponds de manière claire, précise et concise en français.</textarea>
+                    <span class="setting-hint">Instructions globales pour le modèle</span>
+                </div>
+                <div class="setting-group">
+                    <button class="btn-danger" id="btn-clear-history">Effacer toutes les conversations</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
