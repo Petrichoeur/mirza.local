@@ -3,15 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mirza AI — Chat</title>
-    <meta name="description" content="Interface de chat pour Mirza, votre station d'IA locale sur Apple Silicon.">
+    <title>Mirza AI — Station Control Panel</title>
+    <meta name="description" content="Panneau de contrôle complet pour Mirza, votre station d'IA locale sur Apple Silicon.">
 
-    <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 
-    <!-- Markdown + Syntax Highlighting (CDN) -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark.min.css">
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js"></script>
@@ -20,9 +18,7 @@
 </head>
 <body>
 
-    <!-- ═══════════════════════════════════════════════════ -->
-    <!-- SIDEBAR                                            -->
-    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- ═══════════════════ SIDEBAR ═══════════════════ -->
     <aside class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <div class="logo">
@@ -30,46 +26,66 @@
                 <span class="logo-text">Mirza</span>
                 <span class="logo-badge">AI</span>
             </div>
-            <button class="btn-icon" id="btn-new-chat" title="Nouvelle conversation">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        </div>
+
+        <!-- Navigation principale -->
+        <nav class="sidebar-nav">
+            <button class="nav-item active" data-view="dashboard" id="nav-dashboard">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                Dashboard
             </button>
-        </div>
+            <button class="nav-item" data-view="chat" id="nav-chat">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                Chat
+            </button>
+            <button class="nav-item" data-view="models" id="nav-models">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                Modèles
+            </button>
+            <button class="nav-item" data-view="config" id="nav-config">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                Config
+            </button>
+            <button class="nav-item" data-view="monitoring" id="nav-monitoring">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                Monitoring
+            </button>
+        </nav>
 
-        <!-- Conversations list -->
-        <div class="sidebar-conversations">
-            <div class="sidebar-section-label">Conversations</div>
-            <div id="conversations-list" class="conversations-list">
-                <!-- Populated by JS -->
+        <!-- Chat: conversations list -->
+        <div class="sidebar-conversations" id="sidebar-conversations" style="display:none;">
+            <div class="sidebar-section-label">
+                Conversations
+                <button class="btn-icon btn-icon-sm" id="btn-new-chat" title="Nouvelle conversation">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                </button>
             </div>
+            <div id="conversations-list" class="conversations-list"></div>
         </div>
 
-        <!-- Server info panel -->
-        <div class="sidebar-footer">
-            <!-- Provider selector -->
+        <!-- Chat: provider + model selectors -->
+        <div class="sidebar-footer" id="sidebar-footer-chat" style="display:none;">
             <div class="provider-selector">
                 <label for="provider-select">Provider</label>
                 <div class="provider-row">
-                    <select id="provider-select" class="select-provider">
-                        <!-- Populated by JS -->
-                    </select>
-                    <div class="server-status-inline" id="server-status">
-                        <div class="status-dot" id="status-dot"></div>
-                    </div>
+                    <select id="provider-select" class="select-provider"></select>
+                    <div class="server-status-inline"><div class="status-dot" id="provider-status-dot"></div></div>
                 </div>
             </div>
-            <!-- Model selector -->
             <div class="model-selector">
                 <label for="model-select">Modèle</label>
-                <select id="model-select" class="select-model">
-                    <option value="">Chargement...</option>
-                </select>
+                <select id="model-select" class="select-model"><option value="">—</option></select>
             </div>
+        </div>
+
+        <!-- Global footer -->
+        <div class="sidebar-footer" id="sidebar-footer-global">
             <div class="sidebar-links">
-                <a href="#" id="link-grafana" class="sidebar-link" target="_blank" title="Ouvrir Grafana">
+                <button class="sidebar-link nav-item" id="link-grafana" data-view="monitoring">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
                     Monitoring
-                </a>
-                <button class="sidebar-link" id="btn-settings" title="Paramètres">
+                </button>
+                <button class="sidebar-link" id="btn-settings">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
                     Paramètres
                 </button>
@@ -77,74 +93,195 @@
         </div>
     </aside>
 
-    <!-- Sidebar toggle for mobile -->
+    <!-- Mobile toggle -->
     <button class="sidebar-toggle" id="sidebar-toggle">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
     </button>
 
-    <!-- ═══════════════════════════════════════════════════ -->
-    <!-- MAIN CHAT AREA                                     -->
-    <!-- ═══════════════════════════════════════════════════ -->
-    <main class="chat-main" id="chat-main">
+    <!-- ═══════════════════ MAIN CONTENT ═══════════════════ -->
+    <main class="main-content" id="main-content">
 
-        <!-- Empty state / Welcome -->
-        <div class="welcome-screen" id="welcome-screen">
-            <div class="welcome-logo">◈</div>
-            <h1>Mirza AI</h1>
-            <p class="welcome-subtitle">Votre station d'IA locale sur Apple Silicon</p>
-            <div class="welcome-suggestions">
-                <button class="suggestion-chip" data-prompt="Explique-moi comment fonctionne le machine learning en termes simples.">
-                    <span class="chip-icon">💡</span>
-                    Expliquer le ML simplement
-                </button>
-                <button class="suggestion-chip" data-prompt="Écris un script Python qui analyse un fichier CSV et génère un graphique.">
-                    <span class="chip-icon">💻</span>
-                    Script Python pour CSV
-                </button>
-                <button class="suggestion-chip" data-prompt="Quels sont les avantages de l'inférence IA locale par rapport au cloud ?">
-                    <span class="chip-icon">🏠</span>
-                    IA locale vs Cloud
-                </button>
-                <button class="suggestion-chip" data-prompt="Rédige un email professionnel pour proposer une collaboration sur un projet open-source.">
-                    <span class="chip-icon">✉️</span>
-                    Email professionnel
+        <!-- ═══ VIEW: DASHBOARD ═══ -->
+        <div class="view active" id="view-dashboard">
+            <div class="view-header">
+                <h1>Dashboard</h1>
+                <button class="btn-secondary" id="btn-refresh-status">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+                    Rafraîchir
                 </button>
             </div>
-        </div>
 
-        <!-- Messages container -->
-        <div class="messages-container" id="messages-container">
-            <div class="messages-scroll" id="messages-scroll">
-                <!-- Messages populated by JS -->
+            <!-- Status cards row -->
+            <div class="dashboard-grid" id="dashboard-grid">
+                <!-- Server status card -->
+                <div class="dash-card dash-card-wide">
+                    <div class="dash-card-header">
+                        <span class="dash-card-icon">🖥</span>
+                        <h3>Serveur</h3>
+                        <div class="status-pill" id="dash-server-status">
+                            <div class="status-dot loading"></div>
+                            <span>Vérification...</span>
+                        </div>
+                    </div>
+                    <div class="dash-card-body" id="dash-server-info">
+                        <div class="dash-info-row"><span class="dash-label">Host</span><span class="dash-value" id="dash-host">—</span></div>
+                        <div class="dash-info-row"><span class="dash-label">IP</span><span class="dash-value" id="dash-ip">—</span></div>
+                        <div class="dash-info-row"><span class="dash-label">API MLX</span><span class="dash-value" id="dash-api">—</span></div>
+                        <div class="dash-info-row"><span class="dash-label">Grafana</span><span class="dash-value" id="dash-grafana">—</span></div>
+                    </div>
+                </div>
+
+                <!-- Hardware card -->
+                <div class="dash-card">
+                    <div class="dash-card-header">
+                        <span class="dash-card-icon">⚙️</span>
+                        <h3>Hardware</h3>
+                    </div>
+                    <div class="dash-card-body" id="dash-hardware-info">
+                        <div class="dash-info-row"><span class="dash-label">Puce</span><span class="dash-value" id="dash-chip">—</span></div>
+                        <div class="dash-info-row"><span class="dash-label">CPU</span><span class="dash-value" id="dash-cpu">—</span></div>
+                        <div class="dash-info-row"><span class="dash-label">GPU</span><span class="dash-value" id="dash-gpu">—</span></div>
+                        <div class="dash-info-row"><span class="dash-label">RAM</span><span class="dash-value" id="dash-ram">—</span></div>
+                    </div>
+                </div>
+
+                <!-- Active model card -->
+                <div class="dash-card">
+                    <div class="dash-card-header">
+                        <span class="dash-card-icon">🧠</span>
+                        <h3>Modèle actif</h3>
+                    </div>
+                    <div class="dash-card-body">
+                        <div class="dash-model-name" id="dash-model-name">Aucun</div>
+                        <div class="dash-model-sub" id="dash-model-sub">Serveur arrêté</div>
+                    </div>
+                </div>
             </div>
-        </div>
 
-        <!-- Input area -->
-        <div class="input-area" id="input-area">
-            <div class="input-wrapper">
-                <textarea
-                    id="message-input"
-                    class="message-input"
-                    placeholder="Envoyer un message à Mirza..."
-                    rows="1"
-                    autofocus
-                ></textarea>
-                <div class="input-actions">
-                    <span class="token-counter" id="token-counter"></span>
-                    <button class="btn-send" id="btn-send" title="Envoyer (Entrée)">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+            <!-- Quick actions -->
+            <div class="dash-section">
+                <h2>Actions rapides</h2>
+                <div class="dash-actions">
+                    <button class="action-btn" id="action-wake" title="Wake on LAN">
+                        <span class="action-icon">⏻</span>
+                        <span class="action-label">Réveiller</span>
+                        <span class="action-hint">mirza start</span>
+                    </button>
+                    <button class="action-btn" id="action-stop-mlx" title="Arrêter le serveur MLX">
+                        <span class="action-icon">■</span>
+                        <span class="action-label">Stop MLX</span>
+                        <span class="action-hint">mirza stop</span>
+                    </button>
+                    <button class="action-btn" id="action-sleep" title="Mettre en veille">
+                        <span class="action-icon">☾</span>
+                        <span class="action-label">Veille</span>
+                        <span class="action-hint">mirza sleep</span>
+                    </button>
+                    <button class="action-btn action-btn-danger" id="action-reboot" title="Redémarrer">
+                        <span class="action-icon">↻</span>
+                        <span class="action-label">Reboot</span>
+                        <span class="action-hint">mirza reboot</span>
                     </button>
                 </div>
             </div>
-            <div class="input-footer">
-                <span class="input-hint">Entrée pour envoyer · Shift+Entrée pour un saut de ligne</span>
+
+            <!-- Logs preview -->
+            <div class="dash-section">
+                <div class="dash-section-header">
+                    <h2>Logs MLX</h2>
+                    <button class="btn-icon btn-icon-sm" id="btn-refresh-logs" title="Rafraîchir">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+                    </button>
+                </div>
+                <pre class="log-output" id="dash-logs">Cliquer pour charger les logs...</pre>
+            </div>
+        </div>
+
+        <!-- ═══ VIEW: CHAT ═══ -->
+        <div class="view" id="view-chat">
+            <div class="welcome-screen" id="welcome-screen">
+                <div class="welcome-logo">◈</div>
+                <h1>Mirza AI</h1>
+                <p class="welcome-subtitle">Votre station d'IA locale sur Apple Silicon</p>
+                <div class="welcome-suggestions">
+                    <button class="suggestion-chip" data-prompt="Explique-moi comment fonctionne le machine learning en termes simples.">
+                        <span class="chip-icon">💡</span>Expliquer le ML simplement
+                    </button>
+                    <button class="suggestion-chip" data-prompt="Écris un script Python qui analyse un fichier CSV et génère un graphique.">
+                        <span class="chip-icon">💻</span>Script Python pour CSV
+                    </button>
+                    <button class="suggestion-chip" data-prompt="Quels sont les avantages de l'inférence IA locale par rapport au cloud ?">
+                        <span class="chip-icon">🏠</span>IA locale vs Cloud
+                    </button>
+                    <button class="suggestion-chip" data-prompt="Rédige un email professionnel pour proposer une collaboration sur un projet open-source.">
+                        <span class="chip-icon">✉️</span>Email professionnel
+                    </button>
+                </div>
+            </div>
+            <div class="messages-container" id="messages-container">
+                <div class="messages-scroll" id="messages-scroll"></div>
+            </div>
+            <div class="input-area" id="input-area">
+                <div class="input-wrapper">
+                    <textarea id="message-input" class="message-input" placeholder="Envoyer un message à Mirza..." rows="1" autofocus></textarea>
+                    <div class="input-actions">
+                        <span class="token-counter" id="token-counter"></span>
+                        <button class="btn-send" id="btn-send" title="Envoyer">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="input-footer"><span class="input-hint">Entrée pour envoyer · Shift+Entrée pour un saut de ligne</span></div>
+            </div>
+        </div>
+
+        <!-- ═══ VIEW: MODELS ═══ -->
+        <div class="view" id="view-models">
+            <div class="view-header">
+                <h1>Catalogue de modèles</h1>
+                <div class="models-filters">
+                    <select id="filter-category" class="select-filter">
+                        <option value="">Toutes catégories</option>
+                    </select>
+                    <select id="filter-ram" class="select-filter">
+                        <option value="">Toute RAM</option>
+                    </select>
+                </div>
+            </div>
+            <div class="models-grid" id="models-grid">
+                <div class="mcp-empty">Chargement du catalogue...</div>
+            </div>
+        </div>
+
+        <!-- ═══ VIEW: CONFIG ═══ -->
+        <div class="view" id="view-config">
+            <div class="view-header">
+                <h1>Configuration</h1>
+                <button class="btn-secondary" id="btn-refresh-config">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+                    Régénérer (SSH)
+                </button>
+            </div>
+            <div class="config-container" id="config-container">
+                <div class="mcp-empty">Chargement de la configuration...</div>
+            </div>
+        </div>
+        <!-- ═══ VIEW: MONITORING ═══ -->
+        <div class="view" id="view-monitoring">
+            <div class="view-header">
+                <h1>Grafana (Monitoring)</h1>
+                <button class="btn-secondary" onclick="document.getElementById('grafana-iframe').src += ''">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+                    Rafraîchir
+                </button>
+            </div>
+            <div style="flex: 1; border-radius: var(--radius-lg); overflow: hidden; background: var(--color-bg-secondary); border: 1px solid var(--color-border); height: calc(100vh - 120px);">
+                <iframe id="grafana-iframe" src="http://mirza.local:3000" style="width: 100%; height: 100%; border: none;"></iframe>
             </div>
         </div>
     </main>
 
-    <!-- ═══════════════════════════════════════════════════ -->
-    <!-- SETTINGS MODAL                                     -->
-    <!-- ═══════════════════════════════════════════════════ -->
+    <!-- ═══════════════════ SETTINGS MODAL ═══════════════════ -->
     <div class="modal-overlay" id="settings-modal">
         <div class="modal modal-wide">
             <div class="modal-header">
@@ -153,43 +290,20 @@
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
                 </button>
             </div>
-
-            <!-- Tabs -->
             <div class="modal-tabs">
-                <button class="modal-tab active" data-tab="tab-providers">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 20h20M5 20V10l7-7 7 7v10"/><path d="M9 20v-6h6v6"/></svg>
-                    Providers
-                </button>
-                <button class="modal-tab" data-tab="tab-generation">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10M18 20V4M6 20v-4"/></svg>
-                    Génération
-                </button>
-                <button class="modal-tab" data-tab="tab-tools">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
-                    Outils (MCP)
-                </button>
-                <button class="modal-tab" data-tab="tab-data">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                    Données
-                </button>
+                <button class="modal-tab active" data-tab="tab-providers">Providers</button>
+                <button class="modal-tab" data-tab="tab-generation">Génération</button>
+                <button class="modal-tab" data-tab="tab-tools">Outils (MCP)</button>
+                <button class="modal-tab" data-tab="tab-data">Données</button>
             </div>
-
             <div class="modal-body">
-                <!-- TAB: Providers -->
                 <div class="tab-content active" id="tab-providers">
                     <div class="providers-header">
-                        <p class="setting-hint" style="margin-bottom: 12px;">Configurez les endpoints d'API OpenAI-compatible. Le provider actif est utilisé pour les requêtes.</p>
-                        <button class="btn-secondary" id="btn-add-provider">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-                            Ajouter un provider
-                        </button>
+                        <p class="setting-hint" style="margin-bottom:12px">Configurez les endpoints d'API OpenAI-compatible.</p>
+                        <button class="btn-secondary" id="btn-add-provider">+ Ajouter</button>
                     </div>
-                    <div id="providers-list" class="providers-list">
-                        <!-- Populated by JS -->
-                    </div>
+                    <div id="providers-list" class="providers-list"></div>
                 </div>
-
-                <!-- TAB: Generation -->
                 <div class="tab-content" id="tab-generation">
                     <div class="setting-group">
                         <label for="setting-temperature">Température</label>
@@ -197,62 +311,38 @@
                             <input type="range" id="setting-temperature" min="0" max="2" step="0.1" value="0.7" />
                             <span id="temperature-value">0.7</span>
                         </div>
-                        <span class="setting-hint">Plus haut = plus créatif, plus bas = plus factuel</span>
                     </div>
                     <div class="setting-group">
                         <label for="setting-max-tokens">Tokens max</label>
                         <input type="number" id="setting-max-tokens" class="setting-input" value="4096" min="64" max="32768" />
-                        <span class="setting-hint">Longueur maximale de la réponse</span>
                     </div>
                     <div class="setting-group">
                         <label for="setting-system-prompt">System prompt</label>
-                        <textarea id="setting-system-prompt" class="setting-textarea" rows="4" placeholder="Instructions système optionnelles...">Tu es Mirza, un assistant IA intelligent et serviable. Tu réponds de manière claire, précise et concise en français.</textarea>
-                        <span class="setting-hint">Instructions globales pour le modèle</span>
+                        <textarea id="setting-system-prompt" class="setting-textarea" rows="4">Tu es Mirza, un assistant IA intelligent et serviable. Tu réponds de manière claire, précise et concise en français.</textarea>
                     </div>
                 </div>
-
-                <!-- TAB: Tools (MCP) -->
                 <div class="tab-content" id="tab-tools">
-                    <div class="tools-status">
-                        <div class="tools-status-icon">🔧</div>
-                        <h3>Model Context Protocol (MCP)</h3>
-                        <p class="setting-hint">Connectez un serveur MCP pour donner des outils au modèle (recherche web, filesystem, calculs, etc.).</p>
-                    </div>
+                    <div class="tools-status"><div class="tools-status-icon">🔧</div><h3>Model Context Protocol</h3><p class="setting-hint">Connectez un serveur MCP pour donner des outils au modèle.</p></div>
                     <div class="setting-group">
                         <label for="setting-mcp-endpoint">Endpoint MCP</label>
                         <input type="text" id="setting-mcp-endpoint" class="setting-input" value="" placeholder="http://localhost:3001" />
-                        <span class="setting-hint">URL du serveur MCP (laissez vide pour désactiver)</span>
                     </div>
                     <div class="setting-group">
                         <label>Outils disponibles</label>
-                        <div id="mcp-tools-list" class="mcp-tools-list">
-                            <div class="mcp-empty">Aucun serveur MCP connecté</div>
-                        </div>
-                        <button class="btn-secondary" id="btn-refresh-mcp" style="margin-top: 8px;">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-                            Rafraîchir les outils
-                        </button>
+                        <div id="mcp-tools-list" class="mcp-tools-list"><div class="mcp-empty">Aucun serveur MCP connecté</div></div>
+                        <button class="btn-secondary" id="btn-refresh-mcp" style="margin-top:8px">Rafraîchir les outils</button>
                     </div>
                 </div>
-
-                <!-- TAB: Data -->
                 <div class="tab-content" id="tab-data">
-                    <div class="setting-group">
-                        <label>Export des conversations</label>
-                        <button class="btn-secondary" id="btn-export-conversations">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
-                            Exporter en JSON
-                        </button>
-                        <span class="setting-hint">Télécharge l'historique complet des conversations</span>
-                    </div>
-                    <div class="setting-group">
-                        <label>Zone de danger</label>
-                        <button class="btn-danger" id="btn-clear-history">Effacer toutes les conversations</button>
-                    </div>
+                    <div class="setting-group"><button class="btn-secondary" id="btn-export-conversations">Exporter en JSON</button></div>
+                    <div class="setting-group"><button class="btn-danger" id="btn-clear-history">Effacer toutes les conversations</button></div>
                 </div>
             </div>
         </div>
     </div>
+
+    <!-- Toast notifications -->
+    <div class="toast-container" id="toast-container"></div>
 
     <script src="app.js"></script>
 </body>

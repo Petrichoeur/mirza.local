@@ -1,30 +1,30 @@
 #!/bin/bash
 # ==============================================================================
-# Mirza AI — WebUI Local Server
-# Lance un serveur HTTP local pour la WebUI de chat
+# Mirza AI — Station Control Panel Server
+# Lance le backend Python qui sert l'UI et expose les commandes mirza en API
 # ==============================================================================
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
-PORT="${1:-3333}"
+REPO_DIR=$(cd "$SCRIPT_DIR/.." &> /dev/null && pwd)
 
-echo ""
-echo -e "\033[0;34m  ╔══════════════════════════════════════════╗\033[0m"
-echo -e "\033[0;34m  ║\033[0m    \033[1mMirza AI\033[0m — WebUI Chat Interface     \033[0;34m║\033[0m"
-echo -e "\033[0;34m  ╚══════════════════════════════════════════╝\033[0m"
-echo ""
-echo -e "  Interface:  \033[1;33mhttp://localhost:${PORT}\033[0m"
-echo -e "  API MLX:    \033[2mhttp://localhost:8080/v1\033[0m"
-echo ""
-echo -e "  \033[2mCtrl+C pour arrêter\033[0m"
-echo ""
+# Source environment variables from mirza.conf if available
+CONF_FILE="$REPO_DIR/mirza/mirza.conf"
+if [ -f "$CONF_FILE" ]; then
+    export MIRZA_HOST=$(grep "^ip=" "$CONF_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+    export MIRZA_HOST="${MIRZA_HOST:-mirza.local}"
+fi
 
-# Open browser (works on Linux and macOS)
+# Override port via argument
+export MIRZA_WEBUI_PORT="${1:-3333}"
+
+# Open browser
 if command -v xdg-open &>/dev/null; then
-    xdg-open "http://localhost:${PORT}" 2>/dev/null &
+    (sleep 1 && xdg-open "http://localhost:${MIRZA_WEBUI_PORT}" 2>/dev/null) &
 elif command -v open &>/dev/null; then
-    open "http://localhost:${PORT}" 2>/dev/null &
+    (sleep 1 && open "http://localhost:${MIRZA_WEBUI_PORT}" 2>/dev/null) &
 fi
 
 # Start server
 cd "$SCRIPT_DIR"
-python3 -m http.server "$PORT"
+python3 server.py
+

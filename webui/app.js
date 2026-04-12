@@ -1,78 +1,33 @@
 /* ═══════════════════════════════════════════════════════════════
-   Mirza AI — Chat Application Logic
-   Multi-provider support, MCP tools, streaming, conversations
+   Mirza AI — Station Control Panel
+   Dashboard, Chat, Models Catalog, Config — mirrors mirza CLI
    ═══════════════════════════════════════════════════════════════ */
 
 // =================================================================
-// Default Providers
+// Default Providers (for chat)
 // =================================================================
 const DEFAULT_PROVIDERS = [
-    {
-        id: 'mirza-local',
-        name: 'Mirza (Local MLX)',
-        type: 'local',
-        endpoint: 'http://localhost:8080',
-        apiKey: '',
-        model: '',
-        description: 'Serveur MLX local sur Apple Silicon'
-    },
-    {
-        id: 'openai',
-        name: 'OpenAI',
-        type: 'cloud',
-        endpoint: 'https://api.openai.com',
-        apiKey: '',
-        model: 'gpt-4o-mini',
-        description: 'API Cloud OpenAI (nécessite une clé API)'
-    },
-    {
-        id: 'anthropic-openai',
-        name: 'Anthropic (compatible)',
-        type: 'cloud',
-        endpoint: 'https://api.anthropic.com/v1',
-        apiKey: '',
-        model: 'claude-sonnet-4-20250514',
-        description: 'API Anthropic via proxy compatible OpenAI'
-    },
-    {
-        id: 'groq',
-        name: 'Groq',
-        type: 'cloud',
-        endpoint: 'https://api.groq.com/openai',
-        apiKey: '',
-        model: 'llama-3.3-70b-versatile',
-        description: 'Inférence ultra-rapide sur Groq Cloud'
-    },
-    {
-        id: 'mistral',
-        name: 'Mistral AI',
-        type: 'cloud',
-        endpoint: 'https://api.mistral.ai',
-        apiKey: '',
-        model: 'mistral-small-latest',
-        description: 'API Mistral AI (français natif)'
-    },
-    {
-        id: 'ollama',
-        name: 'Ollama (Local)',
-        type: 'local',
-        endpoint: 'http://localhost:11434',
-        apiKey: '',
-        model: '',
-        description: 'Serveur Ollama local'
-    }
+    { id: 'mirza-local', name: 'Mirza (Local MLX)', type: 'local', endpoint: 'http://localhost:8080', apiKey: '', model: '' },
+    { id: 'openai', name: 'OpenAI', type: 'cloud', endpoint: 'https://api.openai.com', apiKey: '', model: 'gpt-4o-mini' },
+    { id: 'anthropic-openai', name: 'Anthropic', type: 'cloud', endpoint: 'https://api.anthropic.com/v1', apiKey: '', model: 'claude-sonnet-4-20250514' },
+    { id: 'groq', name: 'Groq', type: 'cloud', endpoint: 'https://api.groq.com/openai', apiKey: '', model: 'llama-3.3-70b-versatile' },
+    { id: 'mistral', name: 'Mistral AI', type: 'cloud', endpoint: 'https://api.mistral.ai', apiKey: '', model: 'mistral-small-latest' },
+    { id: 'ollama', name: 'Ollama', type: 'local', endpoint: 'http://localhost:11434', apiKey: '', model: '' },
 ];
 
 // =================================================================
 // State
 // =================================================================
 const state = {
+    currentView: 'dashboard',
     conversations: [],
     activeConversationId: null,
     isStreaming: false,
     abortController: null,
     providers: [],
     activeProviderId: 'mirza-local',
+    modelsCatalog: null,
+    dashboardData: null,
     settings: {
         temperature: 0.7,
         maxTokens: 4096,
@@ -86,83 +41,112 @@ const state = {
 // =================================================================
 // DOM References
 // =================================================================
-const dom = {
-    sidebar: document.getElementById('sidebar'),
-    sidebarToggle: document.getElementById('sidebar-toggle'),
-    conversationsList: document.getElementById('conversations-list'),
-    welcomeScreen: document.getElementById('welcome-screen'),
-    messagesContainer: document.getElementById('messages-container'),
-    messagesScroll: document.getElementById('messages-scroll'),
-    messageInput: document.getElementById('message-input'),
-    btnSend: document.getElementById('btn-send'),
-    btnNewChat: document.getElementById('btn-new-chat'),
-    providerSelect: document.getElementById('provider-select'),
-    modelSelect: document.getElementById('model-select'),
-    statusDot: document.getElementById('status-dot'),
-    tokenCounter: document.getElementById('token-counter'),
-    settingsModal: document.getElementById('settings-modal'),
-    btnSettings: document.getElementById('btn-settings'),
-    btnCloseSettings: document.getElementById('btn-close-settings'),
-    settingTemperature: document.getElementById('setting-temperature'),
-    temperatureValue: document.getElementById('temperature-value'),
-    settingMaxTokens: document.getElementById('setting-max-tokens'),
-    settingSystemPrompt: document.getElementById('setting-system-prompt'),
-    settingMcpEndpoint: document.getElementById('setting-mcp-endpoint'),
-    mcpToolsList: document.getElementById('mcp-tools-list'),
-    btnRefreshMcp: document.getElementById('btn-refresh-mcp'),
-    btnClearHistory: document.getElementById('btn-clear-history'),
-    btnExportConversations: document.getElementById('btn-export-conversations'),
-    btnAddProvider: document.getElementById('btn-add-provider'),
-    providersList: document.getElementById('providers-list'),
-    linkGrafana: document.getElementById('link-grafana'),
-};
+const dom = {};
+function initDom() {
+    const ids = [
+        'sidebar', 'sidebar-toggle', 'conversations-list', 'sidebar-conversations',
+        'sidebar-footer-chat', 'sidebar-footer-global',
+        'welcome-screen', 'messages-container', 'messages-scroll',
+        'message-input', 'btn-send', 'btn-new-chat',
+        'provider-select', 'model-select', 'provider-status-dot',
+        'token-counter', 'settings-modal', 'btn-settings', 'btn-close-settings',
+        'setting-temperature', 'temperature-value', 'setting-max-tokens',
+        'setting-system-prompt', 'setting-mcp-endpoint',
+        'mcp-tools-list', 'btn-refresh-mcp',
+        'btn-clear-history', 'btn-export-conversations', 'btn-add-provider',
+        'providers-list', 'link-grafana', 'toast-container',
+        'btn-refresh-status', 'btn-refresh-logs', 'btn-refresh-config',
+        'dash-server-status', 'dash-host', 'dash-ip', 'dash-api', 'dash-grafana',
+        'dash-chip', 'dash-cpu', 'dash-gpu', 'dash-ram',
+        'dash-model-name', 'dash-model-sub', 'dash-logs',
+        'dashboard-grid', 'models-grid', 'config-container',
+        'filter-category', 'filter-ram',
+        'action-wake', 'action-stop-mlx', 'action-sleep', 'action-reboot',
+        'nav-monitoring'
+    ];
+    ids.forEach(id => { dom[id.replace(/-/g, '_')] = document.getElementById(id.replace(/-/g, '_')) || document.getElementById(id); });
+    // Fix: re-map with actual IDs
+    dom.sidebar = document.getElementById('sidebar');
+    dom.sidebarToggle = document.getElementById('sidebar-toggle');
+    dom.conversationsList = document.getElementById('conversations-list');
+    dom.sidebarConversations = document.getElementById('sidebar-conversations');
+    dom.sidebarFooterChat = document.getElementById('sidebar-footer-chat');
+    dom.welcomeScreen = document.getElementById('welcome-screen');
+    dom.messagesContainer = document.getElementById('messages-container');
+    dom.messagesScroll = document.getElementById('messages-scroll');
+    dom.messageInput = document.getElementById('message-input');
+    dom.btnSend = document.getElementById('btn-send');
+    dom.btnNewChat = document.getElementById('btn-new-chat');
+    dom.providerSelect = document.getElementById('provider-select');
+    dom.modelSelect = document.getElementById('model-select');
+    dom.providerStatusDot = document.getElementById('provider-status-dot');
+    dom.tokenCounter = document.getElementById('token-counter');
+    dom.settingsModal = document.getElementById('settings-modal');
+    dom.btnSettings = document.getElementById('btn-settings');
+    dom.btnCloseSettings = document.getElementById('btn-close-settings');
+    dom.settingTemperature = document.getElementById('setting-temperature');
+    dom.temperatureValue = document.getElementById('temperature-value');
+    dom.settingMaxTokens = document.getElementById('setting-max-tokens');
+    dom.settingSystemPrompt = document.getElementById('setting-system-prompt');
+    dom.settingMcpEndpoint = document.getElementById('setting-mcp-endpoint');
+    dom.mcpToolsList = document.getElementById('mcp-tools-list');
+    dom.btnRefreshMcp = document.getElementById('btn-refresh-mcp');
+    dom.btnClearHistory = document.getElementById('btn-clear-history');
+    dom.btnExportConversations = document.getElementById('btn-export-conversations');
+    dom.btnAddProvider = document.getElementById('btn-add-provider');
+    dom.providersList = document.getElementById('providers-list');
+    dom.linkGrafana = document.getElementById('link-grafana');
+    dom.toastContainer = document.getElementById('toast-container');
+    dom.btnRefreshStatus = document.getElementById('btn-refresh-status');
+    dom.btnRefreshLogs = document.getElementById('btn-refresh-logs');
+    dom.btnRefreshConfig = document.getElementById('btn-refresh-config');
+    dom.dashServerStatus = document.getElementById('dash-server-status');
+    dom.dashHost = document.getElementById('dash-host');
+    dom.dashIp = document.getElementById('dash-ip');
+    dom.dashApi = document.getElementById('dash-api');
+    dom.dashGrafana = document.getElementById('dash-grafana');
+    dom.dashChip = document.getElementById('dash-chip');
+    dom.dashCpu = document.getElementById('dash-cpu');
+    dom.dashGpu = document.getElementById('dash-gpu');
+    dom.dashRam = document.getElementById('dash-ram');
+    dom.dashModelName = document.getElementById('dash-model-name');
+    dom.dashModelSub = document.getElementById('dash-model-sub');
+    dom.dashLogs = document.getElementById('dash-logs');
+    dom.modelsGrid = document.getElementById('models-grid');
+    dom.configContainer = document.getElementById('config-container');
+    dom.filterCategory = document.getElementById('filter-category');
+    dom.filterRam = document.getElementById('filter-ram');
+    dom.actionWake = document.getElementById('action-wake');
+    dom.actionStopMlx = document.getElementById('action-stop-mlx');
+    dom.actionSleep = document.getElementById('action-sleep');
+    dom.actionReboot = document.getElementById('action-reboot');
+}
 
 // =================================================================
-// Initialization
+// Init
 // =================================================================
 function init() {
+    initDom();
     loadState();
     setupEventListeners();
     renderProviderSelect();
     renderConversationsList();
-    updateView();
-    checkServerStatus();
-    setInterval(checkServerStatus, 15000);
+    switchView('dashboard');
+    loadDashboard();
 }
 
 function loadState() {
-    try {
-        const saved = localStorage.getItem('mirza_conversations');
-        if (saved) state.conversations = JSON.parse(saved);
-    } catch(e) { state.conversations = []; }
-
-    try {
-        const settings = localStorage.getItem('mirza_settings');
-        if (settings) Object.assign(state.settings, JSON.parse(settings));
-    } catch(e) {}
-
-    try {
-        const providers = localStorage.getItem('mirza_providers');
-        if (providers) {
-            state.providers = JSON.parse(providers);
-        } else {
-            state.providers = JSON.parse(JSON.stringify(DEFAULT_PROVIDERS));
-        }
-    } catch(e) {
-        state.providers = JSON.parse(JSON.stringify(DEFAULT_PROVIDERS));
-    }
-
+    try { const s = localStorage.getItem('mirza_conversations'); if (s) state.conversations = JSON.parse(s); } catch(e) {}
+    try { const s = localStorage.getItem('mirza_settings'); if (s) Object.assign(state.settings, JSON.parse(s)); } catch(e) {}
+    try { const s = localStorage.getItem('mirza_providers'); state.providers = s ? JSON.parse(s) : JSON.parse(JSON.stringify(DEFAULT_PROVIDERS)); } catch(e) { state.providers = JSON.parse(JSON.stringify(DEFAULT_PROVIDERS)); }
     state.activeProviderId = localStorage.getItem('mirza_active_provider') || 'mirza-local';
     state.activeConversationId = localStorage.getItem('mirza_active_conversation');
 
-    // Apply settings to UI
     dom.settingTemperature.value = state.settings.temperature;
     dom.temperatureValue.textContent = state.settings.temperature;
     dom.settingMaxTokens.value = state.settings.maxTokens;
     dom.settingSystemPrompt.value = state.settings.systemPrompt;
     dom.settingMcpEndpoint.value = state.settings.mcpEndpoint || '';
-
-    updateGrafanaLink();
 }
 
 function saveState() {
@@ -170,37 +154,67 @@ function saveState() {
     localStorage.setItem('mirza_settings', JSON.stringify(state.settings));
     localStorage.setItem('mirza_providers', JSON.stringify(state.providers));
     localStorage.setItem('mirza_active_provider', state.activeProviderId);
-    if (state.activeConversationId) {
-        localStorage.setItem('mirza_active_conversation', state.activeConversationId);
-    }
+    if (state.activeConversationId) localStorage.setItem('mirza_active_conversation', state.activeConversationId);
 }
 
 function getActiveProvider() {
     return state.providers.find(p => p.id === state.activeProviderId) || state.providers[0];
 }
 
-function updateGrafanaLink() {
-    const provider = getActiveProvider();
-    try {
-        const host = new URL(provider.endpoint).hostname;
-        if (host === 'localhost' || host.endsWith('.local')) {
-            dom.linkGrafana.href = `http://${host}:3000`;
-        }
-    } catch(e) {}
+// =================================================================
+// Toast Notifications
+// =================================================================
+function toast(message, type = 'info') {
+    const icons = { success: '✓', error: '✗', info: '◈' };
+    const el = document.createElement('div');
+    el.className = `toast ${type}`;
+    el.innerHTML = `<span class="toast-icon">${icons[type] || '◈'}</span><span>${escapeHtml(message)}</span>`;
+    dom.toastContainer.appendChild(el);
+    setTimeout(() => {
+        el.style.animation = 'toastOut 0.3s ease-out forwards';
+        setTimeout(() => el.remove(), 300);
+    }, 4000);
+}
+
+// =================================================================
+// Navigation / Views
+// =================================================================
+function switchView(viewName) {
+    state.currentView = viewName;
+
+    // Update nav
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    const activeNav = document.querySelector(`.nav-item[data-view="${viewName}"]`);
+    if (activeNav) activeNav.classList.add('active');
+
+    // Update views
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    const activeView = document.getElementById(`view-${viewName}`);
+    if (activeView) activeView.classList.add('active');
+
+    // Toggle sidebar chat elements
+    const isChat = viewName === 'chat';
+    dom.sidebarConversations.style.display = isChat ? 'flex' : 'none';
+    dom.sidebarFooterChat.style.display = isChat ? 'flex' : 'none';
+
+    if (isChat) {
+        updateChatView();
+        checkProviderStatus();
+    }
+
+    dom.sidebar.classList.remove('open');
 }
 
 // =================================================================
 // Event Listeners
 // =================================================================
 function setupEventListeners() {
-    dom.btnSend.addEventListener('click', sendMessage);
-    dom.messageInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    // Navigation
+    document.querySelectorAll('.nav-item').forEach(n => {
+        n.addEventListener('click', () => switchView(n.dataset.view));
     });
-    dom.messageInput.addEventListener('input', autoResize);
-    dom.btnNewChat.addEventListener('click', newConversation);
 
-    // Sidebar toggle
+    // Mobile sidebar
     dom.sidebarToggle.addEventListener('click', () => dom.sidebar.classList.toggle('open'));
     document.addEventListener('click', (e) => {
         if (window.innerWidth <= 768 && dom.sidebar.classList.contains('open') &&
@@ -209,27 +223,26 @@ function setupEventListeners() {
         }
     });
 
-    // Provider selector in sidebar
+    // Chat
+    dom.btnSend.addEventListener('click', sendMessage);
+    dom.messageInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+    });
+    dom.messageInput.addEventListener('input', autoResize);
+    dom.btnNewChat.addEventListener('click', newConversation);
+
+    // Provider selector
     dom.providerSelect.addEventListener('change', (e) => {
         state.activeProviderId = e.target.value;
         saveState();
-        updateGrafanaLink();
-        checkServerStatus();
+        checkProviderStatus();
         renderProviderCards();
     });
 
     // Settings modal
-    dom.btnSettings.addEventListener('click', () => {
-        renderProviderCards();
-        dom.settingsModal.classList.add('visible');
-    });
-    dom.btnCloseSettings.addEventListener('click', () => {
-        dom.settingsModal.classList.remove('visible');
-        saveSettings();
-    });
-    dom.settingsModal.addEventListener('click', (e) => {
-        if (e.target === dom.settingsModal) { dom.settingsModal.classList.remove('visible'); saveSettings(); }
-    });
+    dom.btnSettings.addEventListener('click', () => { renderProviderCards(); dom.settingsModal.classList.add('visible'); });
+    dom.btnCloseSettings.addEventListener('click', () => { dom.settingsModal.classList.remove('visible'); saveSettings(); });
+    dom.settingsModal.addEventListener('click', (e) => { if (e.target === dom.settingsModal) { dom.settingsModal.classList.remove('visible'); saveSettings(); } });
 
     // Tabs
     document.querySelectorAll('.modal-tab').forEach(tab => {
@@ -241,55 +254,316 @@ function setupEventListeners() {
         });
     });
 
-    dom.settingTemperature.addEventListener('input', (e) => {
-        dom.temperatureValue.textContent = e.target.value;
-    });
-
-    // Provider management
+    dom.settingTemperature.addEventListener('input', (e) => dom.temperatureValue.textContent = e.target.value);
     dom.btnAddProvider.addEventListener('click', addCustomProvider);
-
-    // MCP
     dom.btnRefreshMcp.addEventListener('click', refreshMcpTools);
-
-    // Export
     dom.btnExportConversations.addEventListener('click', exportConversations);
-
-    // Clear history
     dom.btnClearHistory.addEventListener('click', () => {
         if (confirm('Supprimer toutes les conversations ?')) {
-            state.conversations = [];
-            state.activeConversationId = null;
-            saveState();
-            renderConversationsList();
-            updateView();
+            state.conversations = []; state.activeConversationId = null;
+            saveState(); renderConversationsList(); updateChatView();
             dom.settingsModal.classList.remove('visible');
         }
     });
 
     // Suggestion chips
     document.querySelectorAll('.suggestion-chip').forEach(chip => {
-        chip.addEventListener('click', () => {
-            dom.messageInput.value = chip.dataset.prompt;
-            autoResize();
-            sendMessage();
+        chip.addEventListener('click', () => { dom.messageInput.value = chip.dataset.prompt; autoResize(); sendMessage(); });
+    });
+
+    // Dashboard actions
+    dom.btnRefreshStatus.addEventListener('click', loadDashboard);
+    dom.btnRefreshLogs.addEventListener('click', loadLogs);
+    dom.dashLogs.addEventListener('click', loadLogs);
+    dom.actionWake.addEventListener('click', () => apiAction('/api/server/wake', 'Envoi du Wake-on-LAN...'));
+    dom.actionStopMlx.addEventListener('click', () => {
+        if (confirm('Arrêter le serveur MLX ?')) apiAction('/api/mlx/stop', 'Arrêt du serveur MLX...');
+    });
+    dom.actionSleep.addEventListener('click', () => {
+        if (confirm('Mettre le Mac en veille ?')) apiAction('/api/server/sleep', 'Mise en veille...');
+    });
+    dom.actionReboot.addEventListener('click', () => {
+        if (confirm('⚠️ Redémarrer le Mac ?')) apiAction('/api/server/reboot', 'Redémarrage...');
+    });
+
+    // Config
+    dom.btnRefreshConfig.addEventListener('click', regenerateConfig);
+
+    // Models filters
+    dom.filterCategory.addEventListener('change', renderFilteredModels);
+    dom.filterRam.addEventListener('change', renderFilteredModels);
+}
+
+// =================================================================
+// Dashboard
+// =================================================================
+async function loadDashboard() {
+    setDashStatus('loading', 'Vérification...');
+
+    try {
+        const res = await fetch('/api/status', { signal: AbortSignal.timeout(10000) });
+        const data = await res.json();
+        state.dashboardData = data;
+
+        if (data.server_online) {
+            setDashStatus('online', 'En ligne');
+        } else {
+            setDashStatus('offline', 'Hors ligne');
+        }
+
+        const hostAddr = data.host || 'mirza.local';
+        dom.dashHost.textContent = hostAddr;
+        // Don't fallback to host for IP if we just want IP
+        dom.dashIp.textContent = data.hardware?.ip && data.hardware.ip !== hostAddr ? data.hardware.ip : (data.hardware?.ip || hostAddr);
+        dom.dashApi.textContent = data.mlx_api ? `✓ Port ${data.api_port}` : '✗ Arrêté';
+        dom.dashApi.style.color = data.mlx_api ? 'var(--color-success)' : 'var(--color-text-tertiary)';
+        dom.dashGrafana.textContent = data.grafana ? '✓ Port 3000' : '✗ Arrêté';
+        dom.dashGrafana.style.color = data.grafana ? 'var(--color-success)' : 'var(--color-text-tertiary)';
+
+        if (data.server_online && !data.config_available && !window._hasTriedGenerateConfig) {
+            window._hasTriedGenerateConfig = true;
+            window._isGeneratingConfig = true;
+            toast('Configuration manquante, génération automatique en cours...', 'info');
+            regenerateConfig().then(() => {
+                window._isGeneratingConfig = false;
+                loadDashboard();
+            });
+        }
+
+        if (window._isGeneratingConfig) {
+            dom.dashChip.textContent = 'Génération...';
+            dom.dashCpu.textContent = '...';
+            dom.dashGpu.textContent = '...';
+            dom.dashRam.textContent = '...';
+        } else {
+            dom.dashChip.textContent = data.hardware?.chip || '—';
+            dom.dashCpu.textContent = data.hardware?.cpu_cores ? `${data.hardware.cpu_cores} cœurs` : '—';
+            dom.dashGpu.textContent = data.hardware?.gpu_cores ? `${data.hardware.gpu_cores} cœurs` : '—';
+            dom.dashRam.textContent = data.hardware?.ram_gb ? `${data.hardware.ram_gb} Go` : '—';
+        }
+
+        if (data.active_model) {
+            const short = data.active_model.split('/').pop();
+            dom.dashModelName.textContent = short;
+            dom.dashModelSub.textContent = data.active_model;
+        } else {
+            dom.dashModelName.textContent = 'Aucun';
+            dom.dashModelSub.textContent = data.mlx_api ? 'Aucun modèle chargé' : 'Serveur MLX arrêté';
+        }
+
+        // Update Grafana iframe (always use mirza.local for reliable access)
+        const grafanaUrl = `http://${data.host || 'mirza.local'}:3000`;
+        const iframe = document.getElementById('grafana-iframe');
+        if (iframe && iframe.src !== grafanaUrl && iframe.src !== grafanaUrl + '/') {
+            iframe.src = grafanaUrl;
+        }
+
+    } catch (e) {
+        setDashStatus('offline', 'Erreur de connexion');
+        console.error('Dashboard error:', e);
+    }
+
+    // Also load models catalog
+    loadModelsCatalog();
+}
+
+function setDashStatus(status, text) {
+    dom.dashServerStatus.innerHTML = `<div class="status-dot ${status}"></div><span>${text}</span>`;
+}
+
+async function loadLogs() {
+    dom.dashLogs.textContent = 'Chargement...';
+    try {
+        const res = await fetch('/api/mlx/logs');
+        const data = await res.json();
+        dom.dashLogs.textContent = data.logs || 'Aucun log disponible';
+    } catch (e) {
+        dom.dashLogs.textContent = `Erreur: ${e.message}`;
+    }
+}
+
+async function apiAction(endpoint, message) {
+    toast(message, 'info');
+    try {
+        const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        const data = await res.json();
+        if (data.ok !== false) {
+            toast(data.message || 'Commande exécutée', 'success');
+        } else {
+            toast(data.error || 'Erreur', 'error');
+        }
+        setTimeout(loadDashboard, 3000);
+    } catch (e) {
+        toast(`Erreur: ${e.message}`, 'error');
+    }
+}
+
+// =================================================================
+// Models Catalog
+// =================================================================
+async function loadModelsCatalog() {
+    try {
+        const res = await fetch('/api/models');
+        const data = await res.json();
+        state.modelsCatalog = data;
+        populateFilters(data);
+        renderFilteredModels();
+    } catch (e) {
+        dom.modelsGrid.innerHTML = `<div class="mcp-empty">Erreur: ${escapeHtml(e.message)}</div>`;
+    }
+}
+
+function populateFilters(data) {
+    if (!data.categories) return;
+    dom.filterCategory.innerHTML = '<option value="">Toutes catégories</option>';
+    Object.entries(data.categories).forEach(([key, cat]) => {
+        dom.filterCategory.innerHTML += `<option value="${key}">${cat.icon} ${cat.label}</option>`;
+    });
+    if (data.ram_tiers) {
+        dom.filterRam.innerHTML = '<option value="">Toute RAM</option>';
+        Object.entries(data.ram_tiers).forEach(([key, tier]) => {
+            dom.filterRam.innerHTML += `<option value="${key}">${tier.label} (≤${tier.max_model_gb} Go modèle)</option>`;
         });
+    }
+}
+
+function renderFilteredModels() {
+    if (!state.modelsCatalog?.catalog) return;
+    const catFilter = dom.filterCategory.value;
+    const ramFilter = dom.filterRam.value;
+    const categories = state.modelsCatalog.categories || {};
+    const ramTiers = state.modelsCatalog.ram_tiers || {};
+
+    let models = state.modelsCatalog.catalog;
+
+    if (catFilter) {
+        models = models.filter(m => m.categories?.includes(catFilter));
+    }
+    if (ramFilter && ramTiers[ramFilter]) {
+        const maxGb = ramTiers[ramFilter].max_model_gb;
+        models = models.filter(m => m.size_gb <= maxGb);
+    }
+
+    if (models.length === 0) {
+        dom.modelsGrid.innerHTML = '<div class="mcp-empty">Aucun modèle correspondant aux filtres</div>';
+        return;
+    }
+
+    dom.modelsGrid.innerHTML = '';
+    models.forEach(m => {
+        const card = document.createElement('div');
+        card.className = `model-card${m.recommended ? ' recommended' : ''}`;
+
+        const catTags = (m.categories || []).map(c => {
+            const cat = categories[c];
+            return `<span class="model-tag">${cat ? cat.icon : ''} ${cat ? cat.label : c}</span>`;
+        }).join('');
+
+        card.innerHTML = `
+            <div class="model-card-header">
+                <div class="model-card-name">${escapeHtml(m.name)}</div>
+                ${m.recommended ? '<span class="model-tag star">⭐ Recommandé</span>' : ''}
+            </div>
+            <div class="model-card-family">${escapeHtml(m.family)} · ${m.parameters} · ${m.quantization}</div>
+            <div class="model-card-desc">${escapeHtml(m.description)}</div>
+            <div class="model-card-meta">
+                <span class="model-tag size">${m.size_gb} Go</span>
+                <span class="model-tag">RAM ≥ ${m.min_ram_gb} Go</span>
+                ${catTags}
+            </div>
+            <div class="model-card-footer">
+                <span class="model-card-stats">↓ ${(m.downloads || 0).toLocaleString()}</span>
+                <div style="display:flex;gap:6px;">
+                    <button class="model-btn model-btn-deploy" onclick="deployModel('${escapeHtml(m.hf_repo)}')">Télécharger</button>
+                    <button class="model-btn model-btn-serve" onclick="serveModel('${escapeHtml(m.hf_repo)}')">Servir</button>
+                </div>
+            </div>
+        `;
+        dom.modelsGrid.appendChild(card);
     });
 }
 
-function autoResize() {
-    const el = dom.messageInput;
-    el.style.height = 'auto';
-    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+async function deployModel(hfRepo) {
+    toast(`Déploiement de ${hfRepo.split('/').pop()}...`, 'info');
+    try {
+        const res = await fetch('/api/mlx/deploy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ hf_repo: hfRepo })
+        });
+        const data = await res.json();
+        toast(data.ok ? 'Modèle téléchargé !' : (data.error || 'Erreur'), data.ok ? 'success' : 'error');
+    } catch (e) {
+        toast(`Erreur: ${e.message}`, 'error');
+    }
 }
 
-function saveSettings() {
-    state.settings.temperature = parseFloat(dom.settingTemperature.value);
-    state.settings.maxTokens = parseInt(dom.settingMaxTokens.value);
-    state.settings.systemPrompt = dom.settingSystemPrompt.value;
-    state.settings.mcpEndpoint = dom.settingMcpEndpoint.value.replace(/\/+$/, '');
-    saveProvidersFromCards();
-    saveState();
-    checkServerStatus();
+async function serveModel(hfRepo) {
+    toast(`Démarrage de ${hfRepo.split('/').pop()}...`, 'info');
+    try {
+        const res = await fetch('/api/mlx/serve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model: hfRepo })
+        });
+        const data = await res.json();
+        toast(data.message || 'Serveur démarré', data.ok ? 'success' : 'error');
+        setTimeout(loadDashboard, 5000);
+    } catch (e) {
+        toast(`Erreur: ${e.message}`, 'error');
+    }
+}
+
+window.deployModel = deployModel;
+window.serveModel = serveModel;
+
+// =================================================================
+// Config
+// =================================================================
+async function loadConfig() {
+    try {
+        const res = await fetch('/api/config');
+        const data = await res.json();
+        if (data.config) {
+            renderConfig(data.config);
+        } else {
+            dom.configContainer.innerHTML = `<div class="mcp-empty">${data.error || 'Configuration introuvable'}</div>`;
+        }
+    } catch (e) {
+        dom.configContainer.innerHTML = `<div class="mcp-empty">Erreur: ${escapeHtml(e.message)}</div>`;
+    }
+}
+
+function renderConfig(config) {
+    dom.configContainer.innerHTML = '';
+    Object.entries(config).forEach(([section, entries]) => {
+        const el = document.createElement('div');
+        el.className = 'config-section';
+        let rows = '';
+        Object.entries(entries).forEach(([key, val]) => {
+            rows += `<div class="config-row"><span class="config-key">${escapeHtml(key)}</span><span class="config-val">${escapeHtml(val)}</span></div>`;
+        });
+        el.innerHTML = `<div class="config-section-header">${escapeHtml(section)}</div><div class="config-rows">${rows}</div>`;
+        dom.configContainer.appendChild(el);
+    });
+}
+
+async function regenerateConfig() {
+    toast('Régénération de la config via SSH...', 'info');
+    dom.btnRefreshConfig.disabled = true;
+    try {
+        const res = await fetch('/api/config/refresh', { method: 'POST' });
+        const data = await res.json();
+        if (data.ok && data.config) {
+            renderConfig(data.config);
+            toast('Configuration mise à jour !', 'success');
+        } else {
+            toast(data.error || 'Erreur', 'error');
+        }
+    } catch (e) {
+        toast(`Erreur: ${e.message}`, 'error');
+    }
+    dom.btnRefreshConfig.disabled = false;
 }
 
 // =================================================================
@@ -299,8 +573,7 @@ function renderProviderSelect() {
     dom.providerSelect.innerHTML = '';
     state.providers.forEach(p => {
         const opt = document.createElement('option');
-        opt.value = p.id;
-        opt.textContent = p.name;
+        opt.value = p.id; opt.textContent = p.name;
         opt.selected = p.id === state.activeProviderId;
         dom.providerSelect.appendChild(opt);
     });
@@ -317,155 +590,96 @@ function renderProviderCards() {
         const card = document.createElement('div');
         card.className = `provider-card${isActive ? ' active-provider' : ''}`;
         card.dataset.providerId = p.id;
-
         card.innerHTML = `
             <div class="provider-card-header">
                 <div class="provider-card-name">
                     <span>${escapeHtml(p.name)}</span>
                     <span class="provider-type-badge ${typeClass}">${typeLabel}</span>
-                    ${isActive ? '<span class="provider-type-badge local" style="font-size:10px;">ACTIF</span>' : ''}
+                    ${isActive ? '<span class="provider-type-badge local" style="font-size:10px">ACTIF</span>' : ''}
                 </div>
                 <div class="provider-card-actions">
-                    ${!isActive ? `<button class="btn-icon" onclick="setActiveProvider('${p.id}')" title="Utiliser ce provider">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
-                    </button>` : ''}
-                    ${!isBuiltin ? `<button class="btn-icon" onclick="deleteProvider('${p.id}')" title="Supprimer">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                    </button>` : ''}
+                    ${!isActive ? `<button class="btn-icon btn-icon-sm" onclick="setActiveProvider('${p.id}')" title="Activer"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg></button>` : ''}
+                    ${!isBuiltin ? `<button class="btn-icon btn-icon-sm" onclick="deleteProvider('${p.id}')" title="Supprimer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg></button>` : ''}
                 </div>
             </div>
             <div class="provider-card-fields">
-                <div class="provider-field">
-                    <label>Endpoint</label>
-                    <input type="text" value="${escapeHtml(p.endpoint)}" data-field="endpoint" placeholder="https://api.example.com" />
-                </div>
-                <div class="provider-field">
-                    <label>Clé API ${p.type === 'local' ? '(optionnelle)' : ''}</label>
-                    <input type="password" value="${escapeHtml(p.apiKey || '')}" data-field="apiKey" placeholder="${p.type === 'local' ? 'Laisser vide pour local' : 'sk-...'}" />
-                </div>
-                <div class="provider-field">
-                    <label>Modèle (override — vide = auto-détection)</label>
-                    <input type="text" value="${escapeHtml(p.model || '')}" data-field="model" placeholder="ex: gpt-4o, llama-3.2-3b..." />
-                </div>
+                <div class="provider-field"><label>Endpoint</label><input type="text" value="${escapeHtml(p.endpoint)}" data-field="endpoint" /></div>
+                <div class="provider-field"><label>Clé API</label><input type="password" value="${escapeHtml(p.apiKey || '')}" data-field="apiKey" placeholder="${p.type === 'local' ? 'Optionnelle' : 'sk-...'}" /></div>
+                <div class="provider-field"><label>Modèle</label><input type="text" value="${escapeHtml(p.model || '')}" data-field="model" placeholder="Auto-détection" /></div>
             </div>
         `;
-
         dom.providersList.appendChild(card);
     });
 }
 
 function saveProvidersFromCards() {
     document.querySelectorAll('.provider-card').forEach(card => {
-        const id = card.dataset.providerId;
-        const provider = state.providers.find(p => p.id === id);
-        if (!provider) return;
-        card.querySelectorAll('[data-field]').forEach(input => {
-            provider[input.dataset.field] = input.value;
-        });
+        const p = state.providers.find(pr => pr.id === card.dataset.providerId);
+        if (!p) return;
+        card.querySelectorAll('[data-field]').forEach(input => p[input.dataset.field] = input.value);
     });
     renderProviderSelect();
 }
 
 function addCustomProvider() {
-    const newProvider = {
-        id: 'custom_' + Date.now(),
-        name: 'Nouveau Provider',
-        type: 'custom',
-        endpoint: 'http://localhost:8080',
-        apiKey: '',
-        model: '',
-        description: ''
-    };
-    state.providers.push(newProvider);
-    saveState();
-    renderProviderSelect();
-    renderProviderCards();
+    state.providers.push({ id: 'custom_' + Date.now(), name: 'Custom', type: 'custom', endpoint: 'http://localhost:8080', apiKey: '', model: '' });
+    saveState(); renderProviderSelect(); renderProviderCards();
 }
 
 function deleteProvider(id) {
     state.providers = state.providers.filter(p => p.id !== id);
-    if (state.activeProviderId === id) {
-        state.activeProviderId = state.providers[0]?.id || 'mirza-local';
-    }
-    saveState();
-    renderProviderSelect();
-    renderProviderCards();
+    if (state.activeProviderId === id) state.activeProviderId = state.providers[0]?.id || 'mirza-local';
+    saveState(); renderProviderSelect(); renderProviderCards();
 }
 
 function setActiveProvider(id) {
     state.activeProviderId = id;
     dom.providerSelect.value = id;
-    saveState();
-    updateGrafanaLink();
-    checkServerStatus();
-    renderProviderCards();
+    saveState(); checkProviderStatus(); renderProviderCards();
 }
 
-// Expose for inline onclick
 window.setActiveProvider = setActiveProvider;
 window.deleteProvider = deleteProvider;
 
-// =================================================================
-// Server Status
-// =================================================================
-async function checkServerStatus() {
-    dom.statusDot.className = 'status-dot loading';
+function saveSettings() {
+    state.settings.temperature = parseFloat(dom.settingTemperature.value);
+    state.settings.maxTokens = parseInt(dom.settingMaxTokens.value);
+    state.settings.systemPrompt = dom.settingSystemPrompt.value;
+    state.settings.mcpEndpoint = dom.settingMcpEndpoint.value.replace(/\/+$/, '');
+    saveProvidersFromCards();
+    saveState();
+    checkProviderStatus();
+}
 
+// =================================================================
+// Provider Status (Chat sidebar)
+// =================================================================
+async function checkProviderStatus() {
+    dom.providerStatusDot.className = 'status-dot loading';
     const provider = getActiveProvider();
-    const headers = { 'Content-Type': 'application/json' };
+    const headers = {};
     if (provider.apiKey) headers['Authorization'] = `Bearer ${provider.apiKey}`;
 
     try {
-        const response = await fetch(`${provider.endpoint}/v1/models`, {
-            headers,
-            signal: AbortSignal.timeout(5000)
-        });
-
-        if (response.ok) {
-            const data = await response.json();
-            dom.statusDot.className = 'status-dot online';
-
+        const res = await fetch(`${provider.endpoint}/v1/models`, { headers, signal: AbortSignal.timeout(5000) });
+        if (res.ok) {
+            const data = await res.json();
+            dom.providerStatusDot.className = 'status-dot online';
             dom.modelSelect.innerHTML = '';
-
-            // If provider has a forced model, just show that
             if (provider.model) {
-                const opt = document.createElement('option');
-                opt.value = provider.model;
-                opt.textContent = provider.model;
-                dom.modelSelect.appendChild(opt);
+                dom.modelSelect.innerHTML += `<option value="${escapeHtml(provider.model)}">${escapeHtml(provider.model)}</option>`;
             }
-
-            // Add models from API response
-            if (data.data && data.data.length > 0) {
-                data.data.forEach(model => {
-                    // Skip if already added as forced model
-                    if (model.id === provider.model) return;
-                    const opt = document.createElement('option');
-                    opt.value = model.id;
-                    const shortName = model.id.split('/').pop();
-                    opt.textContent = shortName;
-                    opt.title = model.id;
-                    dom.modelSelect.appendChild(opt);
+            if (data.data) {
+                data.data.forEach(m => {
+                    if (m.id === provider.model) return;
+                    dom.modelSelect.innerHTML += `<option value="${escapeHtml(m.id)}" title="${escapeHtml(m.id)}">${escapeHtml(m.id.split('/').pop())}</option>`;
                 });
             }
-
-            // Select the forced model if present
             if (provider.model) dom.modelSelect.value = provider.model;
-        } else {
-            throw new Error('Server error');
-        }
-    } catch (e) {
-        dom.statusDot.className = 'status-dot offline';
-
-        dom.modelSelect.innerHTML = '';
-        if (provider.model) {
-            const opt = document.createElement('option');
-            opt.value = provider.model;
-            opt.textContent = `${provider.model} (hors ligne)`;
-            dom.modelSelect.appendChild(opt);
-        } else {
-            dom.modelSelect.innerHTML = '<option value="">Hors ligne</option>';
-        }
+        } else throw new Error();
+    } catch {
+        dom.providerStatusDot.className = 'status-dot offline';
+        dom.modelSelect.innerHTML = provider.model ? `<option value="${escapeHtml(provider.model)}">${escapeHtml(provider.model)} (hors ligne)</option>` : '<option>Hors ligne</option>';
     }
 }
 
@@ -473,148 +687,91 @@ async function checkServerStatus() {
 // MCP Tools
 // =================================================================
 async function refreshMcpTools() {
-    const mcpEndpoint = dom.settingMcpEndpoint.value.replace(/\/+$/, '');
-    if (!mcpEndpoint) {
-        dom.mcpToolsList.innerHTML = '<div class="mcp-empty">Aucun endpoint MCP configuré</div>';
-        return;
-    }
-
-    dom.mcpToolsList.innerHTML = '<div class="mcp-empty">Connexion au serveur MCP...</div>';
-
+    const ep = dom.settingMcpEndpoint.value.replace(/\/+$/, '');
+    if (!ep) { dom.mcpToolsList.innerHTML = '<div class="mcp-empty">Aucun endpoint configuré</div>'; return; }
+    dom.mcpToolsList.innerHTML = '<div class="mcp-empty">Connexion...</div>';
     try {
-        const response = await fetch(`${mcpEndpoint}/tools`, {
-            signal: AbortSignal.timeout(5000)
+        const res = await fetch(`${ep}/tools`, { signal: AbortSignal.timeout(5000) });
+        const data = await res.json();
+        const tools = data.tools || data || [];
+        state.settings.mcpTools = tools;
+        if (!tools.length) { dom.mcpToolsList.innerHTML = '<div class="mcp-empty">Aucun outil</div>'; return; }
+        dom.mcpToolsList.innerHTML = '';
+        tools.forEach(t => {
+            const item = document.createElement('div');
+            item.className = 'mcp-tool-item';
+            item.innerHTML = `<div class="tool-icon">🔧</div><div class="tool-info"><div class="tool-name">${escapeHtml(t.name)}</div><div class="tool-desc">${escapeHtml(t.description || '')}</div></div><input type="checkbox" class="mcp-tool-toggle" ${state.settings.mcpEnabled[t.name] !== false ? 'checked' : ''} data-tool="${escapeHtml(t.name)}" />`;
+            item.querySelector('.mcp-tool-toggle').addEventListener('change', (e) => { state.settings.mcpEnabled[e.target.dataset.tool] = e.target.checked; saveState(); });
+            dom.mcpToolsList.appendChild(item);
         });
-
-        if (response.ok) {
-            const data = await response.json();
-            const tools = data.tools || data || [];
-            state.settings.mcpTools = tools;
-
-            if (tools.length === 0) {
-                dom.mcpToolsList.innerHTML = '<div class="mcp-empty">Serveur connecté — aucun outil disponible</div>';
-                return;
-            }
-
-            dom.mcpToolsList.innerHTML = '';
-            tools.forEach(tool => {
-                const enabled = state.settings.mcpEnabled[tool.name] !== false;
-                const item = document.createElement('div');
-                item.className = 'mcp-tool-item';
-                item.innerHTML = `
-                    <div class="tool-icon">🔧</div>
-                    <div class="tool-info">
-                        <div class="tool-name">${escapeHtml(tool.name)}</div>
-                        <div class="tool-desc">${escapeHtml(tool.description || '')}</div>
-                    </div>
-                    <input type="checkbox" class="mcp-tool-toggle" ${enabled ? 'checked' : ''} data-tool="${escapeHtml(tool.name)}" />
-                `;
-                item.querySelector('.mcp-tool-toggle').addEventListener('change', (e) => {
-                    state.settings.mcpEnabled[e.target.dataset.tool] = e.target.checked;
-                    saveState();
-                });
-                dom.mcpToolsList.appendChild(item);
-            });
-        } else {
-            throw new Error(`HTTP ${response.status}`);
-        }
     } catch (e) {
         dom.mcpToolsList.innerHTML = `<div class="mcp-empty">Erreur: ${escapeHtml(e.message)}</div>`;
     }
 }
 
-function getEnabledMcpTools() {
-    if (!state.settings.mcpEndpoint || !state.settings.mcpTools.length) return [];
-    return state.settings.mcpTools.filter(t => state.settings.mcpEnabled[t.name] !== false);
-}
-
 // =================================================================
-// Conversations Management
+// Chat — Conversations
 // =================================================================
 function newConversation() {
     state.activeConversationId = null;
-    updateView();
+    updateChatView();
     dom.messageInput.focus();
-    dom.sidebar.classList.remove('open');
 }
 
-function createConversation(firstMessage) {
-    const provider = getActiveProvider();
-    const conv = {
-        id: 'conv_' + Date.now(),
-        title: firstMessage.substring(0, 50) + (firstMessage.length > 50 ? '...' : ''),
-        messages: [],
-        providerId: provider.id,
-        providerName: provider.name,
-        createdAt: new Date().toISOString()
-    };
+function createConversation(firstMsg) {
+    const conv = { id: 'conv_' + Date.now(), title: firstMsg.substring(0, 50) + (firstMsg.length > 50 ? '...' : ''), messages: [], providerId: getActiveProvider().id, providerName: getActiveProvider().name, createdAt: new Date().toISOString() };
     state.conversations.unshift(conv);
     state.activeConversationId = conv.id;
-    saveState();
-    renderConversationsList();
+    saveState(); renderConversationsList();
     return conv;
 }
 
-function getActiveConversation() {
-    return state.conversations.find(c => c.id === state.activeConversationId);
-}
+function getActiveConversation() { return state.conversations.find(c => c.id === state.activeConversationId); }
 
 function deleteConversation(id) {
     state.conversations = state.conversations.filter(c => c.id !== id);
-    if (state.activeConversationId === id) {
-        state.activeConversationId = null;
-        updateView();
-    }
-    saveState();
-    renderConversationsList();
+    if (state.activeConversationId === id) { state.activeConversationId = null; updateChatView(); }
+    saveState(); renderConversationsList();
 }
 
 function switchConversation(id) {
     state.activeConversationId = id;
-    saveState();
-    renderConversationsList();
-    updateView();
-    renderMessages();
-    dom.sidebar.classList.remove('open');
+    saveState(); renderConversationsList(); updateChatView(); renderMessages();
 }
 
 function renderConversationsList() {
     dom.conversationsList.innerHTML = '';
-    if (state.conversations.length === 0) {
-        dom.conversationsList.innerHTML = `<div style="padding:12px;color:var(--color-text-tertiary);font-size:var(--text-sm);text-align:center;">Aucune conversation</div>`;
+    if (!state.conversations.length) {
+        dom.conversationsList.innerHTML = '<div style="padding:12px;color:var(--color-text-tertiary);font-size:var(--text-sm);text-align:center">Aucune conversation</div>';
         return;
     }
-    state.conversations.forEach(conv => {
-        const item = document.createElement('button');
-        item.className = 'conversation-item' + (conv.id === state.activeConversationId ? ' active' : '');
-        item.innerHTML = `
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:0.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            <span class="conv-title">${escapeHtml(conv.title)}</span>
-            <button class="conv-delete" title="Supprimer" onclick="event.stopPropagation(); deleteConversation('${conv.id}')">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-            </button>
-        `;
-        item.addEventListener('click', () => switchConversation(conv.id));
-        dom.conversationsList.appendChild(item);
+    state.conversations.forEach(c => {
+        const btn = document.createElement('button');
+        btn.className = 'conversation-item' + (c.id === state.activeConversationId ? ' active' : '');
+        btn.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;opacity:.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span class="conv-title">${escapeHtml(c.title)}</span><button class="conv-delete" title="Supprimer" onclick="event.stopPropagation();deleteConversation('${c.id}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>`;
+        btn.addEventListener('click', () => switchConversation(c.id));
+        dom.conversationsList.appendChild(btn);
     });
 }
 
 function exportConversations() {
     const blob = new Blob([JSON.stringify(state.conversations, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `mirza-conversations-${new Date().toISOString().slice(0,10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `mirza-conversations-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click(); URL.revokeObjectURL(a.href);
+}
+
+function autoResize() {
+    const el = dom.messageInput; el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight, 200) + 'px';
 }
 
 // =================================================================
-// View Management
+// Chat — View
 // =================================================================
-function updateView() {
+function updateChatView() {
     const conv = getActiveConversation();
-    if (!conv || conv.messages.length === 0) {
+    if (!conv || !conv.messages.length) {
         dom.welcomeScreen.style.display = 'flex';
         dom.messagesContainer.classList.remove('visible');
     } else {
@@ -624,41 +781,24 @@ function updateView() {
 }
 
 // =================================================================
-// Message Rendering
+// Chat — Messages
 // =================================================================
 function renderMessages() {
-    const conv = getActiveConversation();
-    if (!conv) return;
+    const conv = getActiveConversation(); if (!conv) return;
     dom.messagesScroll.innerHTML = '';
-    conv.messages.forEach((msg, idx) => appendMessageToDOM(msg, idx));
+    conv.messages.forEach((m, i) => appendMessageToDOM(m, i));
     scrollToBottom();
 }
 
 function appendMessageToDOM(msg, index) {
     const el = document.createElement('div');
-    el.className = `message ${msg.role}`;
-    el.id = `msg-${index}`;
-
-    const isUser = msg.role === 'user';
-    const avatar = isUser ? '👤' : '◈';
-    const sender = isUser ? 'Vous' : (getActiveConversation()?.providerName || 'Mirza');
-
-    let contentHtml = msg.role === 'assistant' ? renderMarkdown(msg.content) : `<p>${escapeHtml(msg.content)}</p>`;
-
+    el.className = `message ${msg.role}`; el.id = `msg-${index}`;
+    const isU = msg.role === 'user';
+    const content = isU ? `<p>${escapeHtml(msg.content)}</p>` : renderMarkdown(msg.content);
     el.innerHTML = `
-        <div class="message-header">
-            <div class="message-avatar">${avatar}</div>
-            <span class="message-sender">${escapeHtml(sender)}</span>
-        </div>
-        <div class="message-content">${contentHtml}</div>
-        ${msg.role === 'assistant' ? `
-        <div class="message-actions">
-            <button class="message-action-btn" onclick="copyMessageContent(${index})" title="Copier">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                Copier
-            </button>
-        </div>
-        ${msg.meta ? `<div class="message-meta">${msg.meta}</div>` : ''}` : ''}
+        <div class="message-header"><div class="message-avatar">${isU ? '👤' : '◈'}</div><span class="message-sender">${isU ? 'Vous' : escapeHtml(getActiveProvider().name)}</span></div>
+        <div class="message-content">${content}</div>
+        ${!isU ? `<div class="message-actions"><button class="message-action-btn" onclick="copyMessageContent(${index})"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier</button></div>${msg.meta ? `<div class="message-meta">${msg.meta}</div>` : ''}` : ''}
     `;
     dom.messagesScroll.appendChild(el);
     enhanceCodeBlocks(el);
@@ -667,60 +807,107 @@ function appendMessageToDOM(msg, index) {
 function createStreamingMessage() {
     const el = document.createElement('div');
     el.className = 'message assistant';
-    el.innerHTML = `
-        <div class="message-header">
-            <div class="message-avatar">◈</div>
-            <span class="message-sender">${escapeHtml(getActiveProvider().name)}</span>
-        </div>
-        <div class="message-content">
-            <div class="typing-indicator"><span></span><span></span><span></span></div>
-        </div>
-    `;
-    dom.messagesScroll.appendChild(el);
-    scrollToBottom();
+    el.innerHTML = `<div class="message-header"><div class="message-avatar">◈</div><span class="message-sender">${escapeHtml(getActiveProvider().name)}</span></div><div class="message-content"><div class="typing-indicator"><span></span><span></span><span></span></div></div>`;
+    dom.messagesScroll.appendChild(el); scrollToBottom();
     return el;
 }
 
 function updateStreamingMessage(el, content) {
-    const contentEl = el.querySelector('.message-content');
-    contentEl.innerHTML = renderMarkdown(content) + '<span class="streaming-cursor"></span>';
-    enhanceCodeBlocks(el);
-    scrollToBottom();
+    el.querySelector('.message-content').innerHTML = renderMarkdown(content) + '<span class="streaming-cursor"></span>';
+    enhanceCodeBlocks(el); scrollToBottom();
 }
 
-function finalizeStreamingMessage(el, content, meta) {
-    const conv = getActiveConversation();
-    const index = conv ? conv.messages.length : 0;
-    const contentEl = el.querySelector('.message-content');
-    contentEl.innerHTML = renderMarkdown(content);
-    enhanceCodeBlocks(el);
-    const actionsHtml = `
-        <div class="message-actions">
-            <button class="message-action-btn" onclick="copyMessageContent(${index})" title="Copier">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                Copier
-            </button>
-        </div>
-        ${meta ? `<div class="message-meta">${meta}</div>` : ''}
-    `;
-    contentEl.insertAdjacentHTML('afterend', actionsHtml);
+function finalizeStreamingMessage(el, content, meta, index) {
+    const ce = el.querySelector('.message-content');
+    ce.innerHTML = renderMarkdown(content); enhanceCodeBlocks(el);
+    ce.insertAdjacentHTML('afterend', `<div class="message-actions"><button class="message-action-btn" onclick="copyMessageContent(${index})"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier</button></div>${meta ? `<div class="message-meta">${meta}</div>` : ''}`);
     scrollToBottom();
 }
 
 // =================================================================
-// Markdown Rendering
+// Chat — Send
+// =================================================================
+async function sendMessage() {
+    const input = dom.messageInput.value.trim();
+    if (!input || state.isStreaming) return;
+    if (state.currentView !== 'chat') switchView('chat');
+
+    let conv = getActiveConversation();
+    if (!conv) conv = createConversation(input);
+    conv.messages.push({ role: 'user', content: input });
+    saveState(); updateChatView(); renderMessages();
+    dom.messageInput.value = ''; dom.messageInput.style.height = 'auto';
+
+    state.isStreaming = true; dom.btnSend.disabled = true;
+    const streamEl = createStreamingMessage();
+
+    try {
+        const t0 = performance.now();
+        let full = '', tokens = 0;
+        const provider = getActiveProvider();
+        const msgs = [];
+        if (state.settings.systemPrompt) msgs.push({ role: 'system', content: state.settings.systemPrompt });
+        conv.messages.forEach(m => msgs.push({ role: m.role, content: m.content }));
+
+        const hdrs = { 'Content-Type': 'application/json' };
+        if (provider.apiKey) hdrs['Authorization'] = `Bearer ${provider.apiKey}`;
+
+        const body = { model: dom.modelSelect.value || provider.model || 'default', messages: msgs, max_tokens: state.settings.maxTokens, temperature: state.settings.temperature, stream: true };
+
+        const enabledTools = state.settings.mcpTools.filter(t => state.settings.mcpEnabled[t.name] !== false);
+        if (state.settings.mcpEndpoint && enabledTools.length) {
+            body.tools = enabledTools.map(t => ({ type: 'function', function: { name: t.name, description: t.description || '', parameters: t.inputSchema || t.parameters || {} } }));
+        }
+
+        state.abortController = new AbortController();
+        const res = await fetch(`${provider.endpoint}/v1/chat/completions`, { method: 'POST', headers: hdrs, body: JSON.stringify(body), signal: state.abortController.signal });
+        if (!res.ok) { const err = await res.text(); throw new Error(`${res.status}: ${err.substring(0, 200)}`); }
+
+        const reader = res.body.getReader();
+        const dec = new TextDecoder();
+        let buf = '';
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += dec.decode(value, { stream: true });
+            const lines = buf.split('\n'); buf = lines.pop();
+            for (const line of lines) {
+                const t = line.trim();
+                if (!t || !t.startsWith('data: ')) continue;
+                const d = t.slice(6); if (d === '[DONE]') continue;
+                try { const p = JSON.parse(d); const delta = p.choices?.[0]?.delta?.content; if (delta) { full += delta; tokens++; updateStreamingMessage(streamEl, full); } } catch {}
+            }
+        }
+
+        const elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+        const tps = tokens > 0 ? (tokens / elapsed).toFixed(1) : '?';
+        const meta = `${tokens} tokens · ${elapsed}s · ~${tps} tok/s · ${provider.name}`;
+        conv.messages.push({ role: 'assistant', content: full, meta });
+        saveState();
+        if (conv.messages.length === 2) { conv.title = input.substring(0, 50) + (input.length > 50 ? '...' : ''); saveState(); renderConversationsList(); }
+        finalizeStreamingMessage(streamEl, full, meta, conv.messages.length - 1);
+
+    } catch (e) {
+        if (e.name === 'AbortError') {
+            streamEl.querySelector('.message-content').innerHTML = '<p><em>Annulé.</em></p>';
+        } else {
+            streamEl.querySelector('.message-content').innerHTML = `<p style="color:var(--color-error)">⚠️ ${escapeHtml(e.message)}</p>`;
+        }
+    } finally {
+        state.isStreaming = false; state.abortController = null;
+        dom.btnSend.disabled = false; dom.messageInput.focus();
+    }
+}
+
+// =================================================================
+// Markdown & Code
 // =================================================================
 function renderMarkdown(text) {
     if (!text) return '';
-    marked.setOptions({
-        breaks: true, gfm: true,
-        highlight: function(code, lang) {
-            if (lang && hljs.getLanguage(lang)) {
-                try { return hljs.highlight(code, { language: lang }).value; } catch(e) {}
-            }
-            return hljs.highlightAuto(code).value;
-        }
-    });
+    marked.setOptions({ breaks: true, gfm: true, highlight: (code, lang) => {
+        if (lang && hljs.getLanguage(lang)) try { return hljs.highlight(code, { language: lang }).value; } catch {}
+        return hljs.highlightAuto(code).value;
+    }});
     return marked.parse(text);
 }
 
@@ -729,196 +916,34 @@ function enhanceCodeBlocks(container) {
         if (block.parentElement.parentElement.querySelector('.code-block-header')) return;
         const pre = block.parentElement;
         const lang = (block.className.match(/language-(\w+)/) || [])[1] || '';
-        const code = block.textContent;
         const header = document.createElement('div');
         header.className = 'code-block-header';
-        header.innerHTML = `
-            <span>${lang || 'code'}</span>
-            <button class="btn-copy" onclick="copyCode(this, \`${btoa(encodeURIComponent(code))}\`)">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
-                Copier
-            </button>
-        `;
+        header.innerHTML = `<span>${lang || 'code'}</span><button class="btn-copy" onclick="copyCode(this, \`${btoa(encodeURIComponent(block.textContent))}\`)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier</button>`;
         pre.insertBefore(header, block);
     });
 }
 
 // =================================================================
-// Send Message & API
+// Utilities
 // =================================================================
-async function sendMessage() {
-    const input = dom.messageInput.value.trim();
-    if (!input || state.isStreaming) return;
-
-    let conv = getActiveConversation();
-    if (!conv) conv = createConversation(input);
-
-    conv.messages.push({ role: 'user', content: input });
-    saveState();
-    updateView();
-    renderMessages();
-
-    dom.messageInput.value = '';
-    dom.messageInput.style.height = 'auto';
-
-    state.isStreaming = true;
-    dom.btnSend.disabled = true;
-    const streamEl = createStreamingMessage();
-
-    try {
-        const startTime = performance.now();
-        let fullContent = '';
-        let tokenCount = 0;
-
-        const provider = getActiveProvider();
-        const apiMessages = [];
-        if (state.settings.systemPrompt) {
-            apiMessages.push({ role: 'system', content: state.settings.systemPrompt });
-        }
-        conv.messages.forEach(m => apiMessages.push({ role: m.role, content: m.content }));
-
-        // Build headers
-        const headers = { 'Content-Type': 'application/json' };
-        if (provider.apiKey) headers['Authorization'] = `Bearer ${provider.apiKey}`;
-
-        // Build request body
-        const body = {
-            model: dom.modelSelect.value || provider.model || 'default',
-            messages: apiMessages,
-            max_tokens: state.settings.maxTokens,
-            temperature: state.settings.temperature,
-            stream: true
-        };
-
-        // Add tools if MCP is configured and tools are enabled
-        const enabledTools = getEnabledMcpTools();
-        if (enabledTools.length > 0) {
-            body.tools = enabledTools.map(t => ({
-                type: 'function',
-                function: {
-                    name: t.name,
-                    description: t.description || '',
-                    parameters: t.inputSchema || t.parameters || {}
-                }
-            }));
-        }
-
-        state.abortController = new AbortController();
-
-        const response = await fetch(`${provider.endpoint}/v1/chat/completions`, {
-            method: 'POST',
-            headers,
-            body: JSON.stringify(body),
-            signal: state.abortController.signal
-        });
-
-        if (!response.ok) {
-            const errorBody = await response.text();
-            throw new Error(`${response.status} ${response.statusText}: ${errorBody.substring(0, 200)}`);
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop();
-
-            for (const line of lines) {
-                const trimmed = line.trim();
-                if (!trimmed || !trimmed.startsWith('data: ')) continue;
-                const data = trimmed.slice(6);
-                if (data === '[DONE]') continue;
-                try {
-                    const parsed = JSON.parse(data);
-                    const delta = parsed.choices?.[0]?.delta?.content;
-                    if (delta) {
-                        fullContent += delta;
-                        tokenCount++;
-                        updateStreamingMessage(streamEl, fullContent);
-                    }
-                } catch(e) {}
-            }
-        }
-
-        const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
-        const tokPerSec = tokenCount > 0 ? (tokenCount / elapsed).toFixed(1) : '?';
-        const meta = `${tokenCount} tokens · ${elapsed}s · ~${tokPerSec} tok/s · ${provider.name}`;
-
-        conv.messages.push({ role: 'assistant', content: fullContent, meta });
-        saveState();
-
-        if (conv.messages.length === 2) {
-            conv.title = input.substring(0, 50) + (input.length > 50 ? '...' : '');
-            saveState();
-            renderConversationsList();
-        }
-
-        finalizeStreamingMessage(streamEl, fullContent, meta);
-
-    } catch (e) {
-        if (e.name === 'AbortError') {
-            streamEl.querySelector('.message-content').innerHTML = '<p><em>Génération annulée.</em></p>';
-        } else {
-            console.error('API Error:', e);
-            streamEl.querySelector('.message-content').innerHTML = `
-                <p style="color: var(--color-error);">
-                    ⚠️ Erreur de connexion.<br>
-                    <span style="font-size: var(--text-sm); color: var(--color-text-tertiary);">
-                        ${escapeHtml(e.message)}<br>
-                        Provider: <code>${escapeHtml(getActiveProvider().name)}</code>
-                    </span>
-                </p>
-            `;
-        }
-    } finally {
-        state.isStreaming = false;
-        state.abortController = null;
-        dom.btnSend.disabled = false;
-        dom.messageInput.focus();
-    }
-}
-
-// =================================================================
-// Utility Functions
-// =================================================================
-function scrollToBottom() {
-    requestAnimationFrame(() => dom.messagesScroll.scrollTop = dom.messagesScroll.scrollHeight);
-}
-
-function escapeHtml(str) {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-}
-
-function copyCode(btn, encodedCode) {
-    const code = decodeURIComponent(atob(encodedCode));
-    navigator.clipboard.writeText(code).then(() => {
-        btn.classList.add('copied');
-        btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> Copié !`;
-        setTimeout(() => {
-            btn.classList.remove('copied');
-            btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier`;
-        }, 2000);
-    });
-}
-
-function copyMessageContent(index) {
-    const conv = getActiveConversation();
-    if (conv && conv.messages[index]) navigator.clipboard.writeText(conv.messages[index].content);
-}
+function scrollToBottom() { requestAnimationFrame(() => dom.messagesScroll.scrollTop = dom.messagesScroll.scrollHeight); }
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function copyCode(btn, enc) { navigator.clipboard.writeText(decodeURIComponent(atob(enc))).then(() => { btn.innerHTML = '✓ Copié'; setTimeout(() => { btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier'; }, 2000); }); }
+function copyMessageContent(i) { const c = getActiveConversation(); if (c?.messages[i]) navigator.clipboard.writeText(c.messages[i].content); }
 
 window.copyCode = copyCode;
 window.deleteConversation = deleteConversation;
 window.copyMessageContent = copyMessageContent;
 
 // =================================================================
-// Boot
+// Boot — observe view changes for lazy loading
 // =================================================================
-document.addEventListener('DOMContentLoaded', init);
+document.addEventListener('DOMContentLoaded', () => {
+    init();
+    // Lazy-load views on first navigation
+    const observer = new MutationObserver(() => {
+        if (state.currentView === 'config' && dom.configContainer.children.length <= 1) loadConfig();
+        if (state.currentView === 'models' && !state.modelsCatalog) loadModelsCatalog();
+    });
+    observer.observe(document.getElementById('main-content'), { childList: true, subtree: true, attributes: true });
+});

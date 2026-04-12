@@ -213,12 +213,14 @@ echo ""
 brew services restart node_exporter
 brew services restart prometheus
 
-# Wipe Grafana DB to enforce IaC — provisioning files are the single source of truth.
-# This removes any manually created datasources/dashboards that would conflict.
-echo " -> Wiping Grafana DB to enforce IaC (provisioning files = source of truth)..."
+# Removed DB wipe to keep previous data
+echo " -> Restarting Grafana without wiping DB..."
 brew services stop grafana
-rm -f "$GRAFANA_DB"
 brew services start grafana
+
+# Add crontab @reboot entries for Homebrew services as a failsafe
+echo " -> Adding @reboot triggers for brew services to help them start without GUI login..."
+( crontab -l 2>/dev/null | grep -v "brew services restart grafana" ; echo "@reboot $(which brew) services restart grafana prometheus node_exporter" ) | crontab -
 
 echo " -> node_exporter, Prometheus and Grafana are back online."
 echo " -> macmon running via nohup (auto-restart at boot via crontab)."
