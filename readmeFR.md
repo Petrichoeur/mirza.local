@@ -22,13 +22,13 @@
 
 - [Présentation](#-présentation)
 - [Prérequis](#-prérequis)
+- [Architecture](#-architecture)
 - [Phase 1 — Préparation de macOS](#-phase-1--préparation-de-macos-depuis-linterface-graphique)
 - [Phase 2 — Configuration du Routeur / Box Internet](#-phase-2--configuration-du-routeur--box-internet)
 - [Phase 3 — Première connexion](#-phase-3--première-connexion)
 - [Phase 4 — Monitoring](#-phase-4--monitoring)
 - [Phase 5 — Déploiement IA (MLX)](#-phase-5--déploiement-ia-mlx)
 - [Phase 6 — WebUI Chat](#-phase-6--webui-chat)
-- [Architecture](#-architecture)
 - [Commandes CLI](#-commandes-cli)
 - [Roadmap](#-roadmap)
 - [Contribuer](#-contribuer)
@@ -53,13 +53,53 @@ Pourquoi le Mac Mini ? Parce que sa RAM unifiée fait pleurer les ingénieurs de
 | Élément | Version / Détail |
 |---|---|
 | **Machine cible** | Mac Mini Apple Silicon (M1 à M4). Si c'est un Intel, recyclez-le en chauffage d'appoint. |
-| **macOS** | Sequoia 15.x (la hype ou rien) |
+| **macOS** | Tahoe 26.x (la hype ou rien) |
 | **Machine cliente** | N'importe quel poste sous Linux/Ubuntu (pour de vrai, même Windows Subsystem for Linux fera l'affaire en pleurant un peu). |
 | **Bash** | 5.2+ (on ne vit pas dans le passé) |
 | **SSH** | OpenSSH 9.x |
 | **Réseau** | Un bon vieux câble RJ45 CAT6 minimum. |
 | **Patience** | Très utile, notamment lors du téléchargement d'Xcode (12 Go de bonheur). |
 | **Café / Boisson Énergétique** | Obligatoire pour la Phase 2. Prévoyez-en un pack. |
+
+---
+
+## 🏗 Architecture
+
+Voici l'ossature du projet (pour s'y retrouver un peu) :
+
+```text
+mirza.local/
+├── mirza/                        # 🖥  Outils côté client (votre poste Linux)
+│   ├── gatcha.sh                 #    Setup SSH + récupération des infos
+│   ├── mirza.sh                  #    CLI principal (13 commandes)
+│   ├── gen_config.sh             #    Générateur de configuration distante
+│   └── mirza.conf                #    Configuration auto-générée localement
+│
+├── mirzaServer/                  # 🍎 Scripts côté serveur (le Mac)
+│   ├── monitoring/
+│   │   ├── setup_monitoring.sh   #    Installation Grafana + Prometheus + macmon
+│   │   └── *.json                #    Dashboards Grafana pré-configurés
+│   ├── ai/
+│   │   ├── setup_mlx.sh          #    Installation uv + MLX + LaunchAgent
+│   │   └── models.json           #    Catalogue local et curation de modèles MLX
+│   └── utils/
+│       ├── baptism.sh            #    Renommage du serveur
+│       └── .zshrc                #    Configuration shell recommandée
+│
+├── webui/                        # 🌐 Interface de chat WebUI
+│   ├── index.html                #    Structure + settings modales + iframe Grafana
+│   ├── style.css                 #    Design system (dark + orange)
+│   ├── app.js                    #    Multi-provider, logic, streaming
+│   ├── server.py                 #    Serveur local et relais API SSH
+│   └── serve.sh                  #    Lancement local easy
+│
+├── docs/                         # 📚 Documentation
+│   └── MCP_ROADMAP.md            #    Roadmap du serveur MCP
+│
+├── README.md                     #    Lisez Moi (English version)
+├── readmeFR.md                   #    Ceci est la version dans la langue de Molière
+└── LICENSE                       #    Licence GPLv3
+```
 
 ---
 
@@ -132,7 +172,7 @@ Installation :
 chmod +x mirzaServer/monitoring/setup_monitoring.sh
 ./mirzaServer/monitoring/setup_monitoring.sh
 ```
-*Note: Le script rajoutera les triggers adéquats via crontab pour Homebrew. Pas de perte de BDD Grafana à chaque tentative, promis !*
+*Note: Le script rajoutera les triggers adéquats via crontab `@reboot` pour que Homebrew lance les services sans vider la base Grafana !*
 
 ---
 
@@ -145,10 +185,8 @@ chmod +x mirzaServer/ai/setup_mlx.sh
 ./mirzaServer/ai/setup_mlx.sh
 ```
 
-**Qu'allez-vous faire tourner là-dessus ?**
-- 💬 *Conversation* : Llama, Qwen, Gemma (Les Avengers des LLMs ouverts).
-- 💻 *Code* : Devstral (Parce que ChatGPT rate toujours ce fameux point virgule).
-- ⚡ *MoE, RAG et Ultra-Léger*.
+**Où sont stockés les modèles sur mon Mac ?**
+L'outil mlx_lm tapera par défaut sous le capot via l'API Hugging Face. Les modèles sont donc stockés et cachés dans : `~/.cache/huggingface/hub/` sur votre Mac. Vous savez où nettoyer en cas de disque saturé...
 
 L'outil `mlx-lm` lance une API *100% compatible OpenAI* en local au port 8080.
 Pour tester :
@@ -166,7 +204,7 @@ Vous vouliez l'interface de ChatGPT mais... chez vous, pour vous, et qui ne vend
 
 - 💬 **Streaming en direct** : Voyez les tokens s'afficher plus vite que vous ne lisez.
 - 🎨 **UI soignée** avec mode sombre.
-- 📈 **Grafana** intégré directement dans le menu : Admirez le CPU fondre en 1 clic.
+- 📈 **Grafana** : Intégration totale en iframe ; vous verrez les datas Macmon de `mirza.local` directement depuis la navigation gauche.
 - 🔧 **Multi-providers** et **Model Context Protocol (MCP)** supportés.
 
 **Démarrage Express :**
@@ -184,7 +222,9 @@ Allez sur `http://localhost:3333` et amusez-vous.
 | `start` | Envoie un jet d'eau Wake-on-LAN au Mac endormi. |
 | `ssh` | Pour les vrais. |
 | `status` | Est-ce que ça marche ou ça cramé ? |
+| `config` | Affiche ou régénère le fichier de configuration de l'infrastructure |
 | `models` / `deploy` | Fait vos courses chez HuggingFace. |
+| `serve` / `stop` | Pilote l'hôte MLX à distance. |
 | `ui` | Déploie la Batmobile (Interface Web). |
 
 ---

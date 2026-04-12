@@ -22,13 +22,13 @@
 
 - [Overview](#-overview)
 - [Prerequisites](#-prerequisites)
+- [Architecture](#-architecture)
 - [Phase 1 — macOS Preparation](#-phase-1--macos-preparation-from-the-gui)
 - [Phase 2 — Router / Network Setup](#-phase-2--router--network-setup)
 - [Phase 3 — First Contact](#-phase-3--first-contact)
 - [Phase 4 — Monitoring](#-phase-4--monitoring)
 - [Phase 5 — AI Deployment (MLX)](#-phase-5--ai-deployment-mlx)
 - [Phase 6 — WebUI Chat](#-phase-6--webui-chat)
-- [Architecture](#-architecture)
 - [CLI Commands](#-cli-commands)
 - [Roadmap](#-roadmap)
 - [Contributing](#-contributing)
@@ -53,13 +53,53 @@ Why the Mac Mini? Because its unified RAM architecture makes traditional PC buil
 | Element | Version / Detail |
 |---|---|
 | **Target Machine** | Apple Silicon Mac Mini (M1 to M4). If it has Intel inside, turn it into a space heater. |
-| **macOS** | Sequoia 15.x (the latest and greatest) |
+| **macOS** | Tahoe 26.x (the latest and greatest) |
 | **Client Machine** | Any device running Linux/Ubuntu (yes, WSL might work if you enjoy suffering). |
 | **Bash** | 5.2+ (we don't live in the stone age) |
 | **SSH** | OpenSSH 9.x |
 | **Network** | A good old RJ45 CAT6 cable. |
 | **Patience** | Highly necessary for the 12GB Xcode download. |
 | **Coffee** | At least one cup. Maybe pour a second one. |
+
+---
+
+## 🏗 Architecture
+
+Here is the exact layout of the repository and how the components interact:
+
+```text
+mirza.local/
+├── mirza/                        # 🖥  Client-side tools (your Linux machine)
+│   ├── gatcha.sh                 #    SSH Setup + info retrieval
+│   ├── mirza.sh                  #    Main CLI wrapper (13 commands)
+│   ├── gen_config.sh             #    Configuration generator
+│   └── mirza.conf                #    Auto-generated configuration file
+│
+├── mirzaServer/                  # 🍎 Server-side scripts (the Mac)
+│   ├── monitoring/
+│   │   ├── setup_monitoring.sh   #    Installation script: Grafana + Prometheus + macmon
+│   │   └── *.json                #    Pre-configured Grafana dashboards
+│   ├── ai/
+│   │   ├── setup_mlx.sh          #    uv + MLX + LaunchAgent setup
+│   │   └── models.json           #    Pre-curated catalog of MLX models
+│   └── utils/
+│       ├── baptism.sh            #    Server renaming tool
+│       └── .zshrc                #    Recommended shell configuration
+│
+├── webui/                        # 🌐 WebUI Chat interface (multi-provider)
+│   ├── index.html                #    Structure + settings modal + iframe Grafana
+│   ├── style.css                 #    Design system (dark mode + orange accents)
+│   ├── app.js                    #    Multi-provider logic, streaming, MCP tools
+│   ├── server.py                 #    Local API Server & remote exec via SSH
+│   └── serve.sh                  #    Easy local startup
+│
+├── docs/                         # 📚 Documentation
+│   └── MCP_ROADMAP.md            #    MCP (Model Context Protocol) roadmap
+│
+├── README.md                     #    This English document
+├── readmeFR.md                   #    French version (pour les baguettes)
+└── LICENSE                       #    GPLv3 License
+```
 
 ---
 
@@ -131,7 +171,7 @@ Installation:
 chmod +x mirzaServer/monitoring/setup_monitoring.sh
 ./mirzaServer/monitoring/setup_monitoring.sh
 ```
-*Note: The script adds crontab safeguards for Homebrew services so you don't lose your custom Grafana dashboards on every reboot!*
+*Note: The script adds crontab safeguards (`@reboot`) for Homebrew services so that Grafana starts headless after a reboot, without wiping configs.*
 
 ---
 
@@ -144,10 +184,8 @@ chmod +x mirzaServer/ai/setup_mlx.sh
 ./mirzaServer/ai/setup_mlx.sh
 ```
 
-**What are you running on this bad boy?**
-- 💬 *Conversational*: Llama, Qwen, Gemma (The Avengers of open LLMs).
-- 💻 *Coding*: Devstral (For when ChatGPT hallucinates imaginary functions).
-- ⚡ *MoE, RAG and Ultra-light*.
+**Where are models saved?**
+Models are downloaded through Hugging Face via the `mlx_lm` utility and are cached directly in your Mac's disk under `~/.cache/huggingface/hub/`.
 
 `mlx-lm` boots up a 100% OpenAI compatible API locally on port 8080.
 Try this out:
@@ -161,11 +199,11 @@ mirza serve       # IT'S ALIVE!
 
 ## 🖥 Phase 6 — WebUI Chat
 
-You wanted the ChatGPT interface but ad-free, completely private, and hosted on your own metallic little box? We got you. Mirza AI Interface is built in pure HTML/JS (zero Node/NPM dependencies, because we like sleep).
+You wanted the ChatGPT interface but ad-free, completely private, and hosted on your own metallic little box? We got you. Mirza AI Interface is built in pure HTML/JS, served via Python.
 
 - 💬 **Live streaming**: Watch tokens render faster than you can read them.
 - 🎨 **Beautiful UI** with a sick dark/orange theme.
-- 📈 **Grafana integration**: Right in the dashboard, watch your CPU melt with just a click.
+- 📈 **Grafana integration**: Deeply integrated. You can monitor Grafana right in an iframe from the UI via `mirza.local`.
 - 🔧 **Multi-providers** and **Model Context Protocol (MCP)** support.
 
 **Quickstart:**
@@ -183,7 +221,10 @@ Hop onto `http://localhost:3333` and enjoy.
 | `start` | Shoots a Wake-on-LAN packet to wake up the sleeping beauty. |
 | `ssh` | Connect right to it like a boss. |
 | `status` | Is it working or is it on fire? |
+| `config` | View or regenerate the hw/sw configs for the remote endpoint. |
 | `models` / `deploy` | Go shopping at HuggingFace. |
+| `serve` / `stop` | Start/stop the MLX server directly. |
+| `chat` | Interact in the terminal. |
 | `ui` | Release the Web UI Kraken. |
 
 ---
