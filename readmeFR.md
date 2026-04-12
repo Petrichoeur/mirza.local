@@ -172,7 +172,7 @@ Installation :
 chmod +x mirzaServer/monitoring/setup_monitoring.sh
 ./mirzaServer/monitoring/setup_monitoring.sh
 ```
-*Note: Le script rajoutera les triggers adéquats via crontab `@reboot` pour que Homebrew lance les services sans vider la base Grafana !*
+*Note: Le script rajoutera les triggers adéquats via crontab `@reboot` pour que Homebrew lance les services sans vider la base Grafana ! La base de données Grafana se trouve à l'emplacement `/opt/homebrew/var/lib/grafana/grafana.db` sur le Mac.*
 
 ---
 

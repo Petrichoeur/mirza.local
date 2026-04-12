@@ -403,10 +403,72 @@ async function apiAction(endpoint, message) {
 // =================================================================
 async function loadModelsCatalog() {
     try {
+        dom.modelsGrid.innerHTML = `<div class="mcp-empty">Chargement des paramètres...</div>`;
         const res = await fetch('/api/models');
-        const data = await res.json();
-        state.modelsCatalog = data;
-        populateFilters(data);
+        const localData = await res.json();
+        
+        dom.modelsGrid.innerHTML = `<div class="mcp-empty">Interrogation de HuggingFace API (mlx-community)...</div>`;
+        const hfRes = await fetch('https://huggingface.co/api/models?author=mlx-community&limit=100&sort=downloads&direction=-1');
+        const hfModels = await hfRes.json();
+        
+        const catalog = [];
+        for (const model of hfModels) {
+            const hf_repo = model.id;
+            const name_parts = hf_repo.split('/')[1] || hf_repo;
+            
+            // Extract Params 
+            let parameters = "N/A";
+            const paramMatch = name_parts.match(/(\d+(?:\.\d+)?[BT]|\d+x\d+(?:\.\d+)?[BT])/i);
+            if (paramMatch) parameters = paramMatch[1].toUpperCase();
+
+            // Extract Quantization
+            let quantization = "Unknown";
+            const quantMatch = name_parts.match(/(\d+bit)/i);
+            if (quantMatch) quantization = quantMatch[1];
+            
+            let family = name_parts.split('-')[0];
+            
+            let paramsNum = parseFloat(parameters.replace('B','').replace('T','000'));
+            if (parameters.includes('X')) {
+                const parts = parameters.toLowerCase().split('x');
+                paramsNum = parseFloat(parts[0]) * parseFloat(parts[1].replace('b',''));
+            }
+            if (isNaN(paramsNum)) paramsNum = 7;
+            
+            let bits = 8;
+            if (quantization !== "Unknown") bits = parseInt(quantization.replace('bit',''));
+            
+            let size_gb = Math.round((paramsNum * (bits / 8) + 0.5) * 10) / 10;
+            // OS Overhead 6GB + KV Cache Approx (1.5GB to 3GB)
+            let kv_cache_gb = paramsNum > 15 ? 3 : 1.5;
+            let min_ram_gb = Math.ceil(size_gb + kv_cache_gb + 6); 
+            
+            let cats = [];
+            let tag = (model.pipeline_tag || "").toLowerCase();
+            let nLower = name_parts.toLowerCase();
+            if (tag.includes('vision') || tag.includes('image') || nLower.includes('vision') || nLower.includes('vl')) cats.push('multimodal');
+            if (nLower.includes('coder') || nLower.includes('code') || nLower.includes('instruct-code')) cats.push('code');
+            cats.push('general');
+            if (nLower.includes('french') || nLower.includes('mistral') || nLower.includes('mixtral')) cats.push('french');
+            
+            catalog.push({
+                hf_repo: hf_repo,
+                name: name_parts,
+                family: family,
+                parameters: parameters,
+                quantization: quantization,
+                size_gb: size_gb,
+                kv_cache_gb: kv_cache_gb,
+                min_ram_gb: min_ram_gb,
+                categories: cats,
+                description: `Téléchargements: ${model.downloads.toLocaleString()} | Pipeline: ${model.pipeline_tag || "Non spécifié"}`,
+                downloads: model.downloads
+            });
+        }
+        
+        localData.catalog = catalog;
+        state.modelsCatalog = localData;
+        populateFilters(localData);
         renderFilteredModels();
     } catch (e) {
         dom.modelsGrid.innerHTML = `<div class="mcp-empty">Erreur: ${escapeHtml(e.message)}</div>`;
@@ -456,13 +518,26 @@ function renderFilteredModels() {
         let warningText = '';
         
         const macRam = state.dashboardData?.hardware?.ram_gb;
+        const chip = state.dashboardData?.hardware?.chip || "";
+        
+        // Calculate Tok/s
+        let bandwidth = 100; // Base M1/M2/M3
+        if (/Max/i.test(chip)) bandwidth = 400;
+        else if (/Pro/i.test(chip)) bandwidth = 200;
+        else if (/Ultra/i.test(chip)) bandwidth = 800;
+        else if (/M4/i.test(chip)) bandwidth = 120;
+        if (/M4 Pro/i.test(chip)) bandwidth = 273;
+        if (/M4 Max/i.test(chip)) bandwidth = 546;
+        
+        let estimatedToks = Math.round(bandwidth / (m.size_gb || 1));
+        
         if (macRam) {
+            // Note: OS requires 6GB overhead min_ram_gb includes it now
             if (macRam < m.min_ram_gb) {
                 isUnsupported = true;
                 isRecommended = false;
-                warningText = `<span class="model-tag" style="background:var(--color-danger);color:white">RAM Insuffisante (${m.min_ram_gb}Go requis)</span>`;
+                warningText = `<span class="model-tag" style="background:var(--color-danger);color:white">RAM Incompatible (${m.min_ram_gb}Go req. OS Inclus)</span>`;
             } else {
-                // If it fits well in RAM, auto-recommend it
                 if (macRam - m.min_ram_gb <= 12 && macRam - m.min_ram_gb >= 0) {
                     isRecommended = true;
                 }
@@ -471,7 +546,7 @@ function renderFilteredModels() {
 
         const card = document.createElement('div');
         card.className = `model-card${isRecommended ? ' recommended' : ''}${isUnsupported ? ' unsupported' : ''}`;
-        if(isUnsupported) card.style.opacity = "0.6";
+        if(isUnsupported) card.style.opacity = "0.4";
 
         const catTags = (m.categories || []).map(c => {
             const cat = categories[c];
@@ -480,14 +555,22 @@ function renderFilteredModels() {
 
         card.innerHTML = `
             <div class="model-card-header">
-                <div class="model-card-name">${escapeHtml(m.name)}</div>
-                ${isRecommended ? '<span class="model-tag star">⭐ Recommandé pour ce Mac</span>' : ''}
+                <div class="model-card-name" style="word-break: break-all; font-size: 0.9em;">${escapeHtml(m.name)}</div>
+                ${isRecommended ? '<span class="model-tag star">⭐ Optimisé Mac</span>' : ''}
             </div>
             <div class="model-card-family">${escapeHtml(m.family)} · ${m.parameters} · ${m.quantization}</div>
             <div class="model-card-desc">${escapeHtml(m.description)}</div>
-            <div class="model-card-meta">
-                <span class="model-tag size">${m.size_gb} Go</span>
-                <span class="model-tag">RAM ≥ ${m.min_ram_gb} Go</span>
+            <div class="model-card-meta" style="flex-wrap: wrap;">
+                <span class="model-tag size">Poids: ${m.size_gb} Go</span>
+                <span class="model-tag size" style="color:var(--color-success)">KV Cache: ${m.kv_cache_gb} Go</span>
+                <span class="model-tag">RAM OS: 6.0 Go</span>
+            </div>
+            <div class="model-card-meta" style="flex-wrap: wrap; margin-top: 4px;">    
+                <span class="model-tag star">⚡ ~${estimatedToks} tok/s</span>
+                <span class="model-tag">⚙️ Flash Attention</span>
+                <span class="model-tag">⚙️ Paged Attention</span>
+            </div>
+            <div class="model-card-meta" style="margin-top:4px;">
                 ${catTags}
                 ${warningText}
             </div>

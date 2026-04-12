@@ -171,7 +171,7 @@ Installation:
 chmod +x mirzaServer/monitoring/setup_monitoring.sh
 ./mirzaServer/monitoring/setup_monitoring.sh
 ```
-*Note: The script adds crontab safeguards (`@reboot`) for Homebrew services so that Grafana starts headless after a reboot, without wiping configs.*
+*Note: The script adds crontab safeguards (`@reboot`) for Homebrew services so that Grafana starts headless after a reboot, without wiping configs. The Grafana database is located at `/opt/homebrew/var/lib/grafana/grafana.db` on the Mac.*
 
 ---
 
