@@ -100,7 +100,7 @@ cmd_status() {
         return 1
     fi
 
-    # MLX server check
+    # Llama-CPP server check (llama-server)
     if curl -sf --max-time 3 "http://${HOST}:${API_PORT}/v1/models" &>/dev/null; then
         ACTIVE=$(curl -sf --max-time 3 "http://${HOST}:${API_PORT}/v1/models" | python3 -c "
 import json, sys
@@ -110,10 +110,10 @@ if 'data' in data and len(data['data']) > 0:
 else:
     print('none')
 " 2>/dev/null)
-        echo -e "  API MLX:      ${GREEN}● RUNNING${NC} (port ${API_PORT})"
+        echo -e "  API Llama:     ${GREEN}● RUNNING${NC} (port ${API_PORT})"
         echo -e "  Modèle actif: ${CYAN}${ACTIVE}${NC}"
     else
-        echo -e "  API MLX:      ${DIM}○ STOPPED${NC}"
+        echo -e "  API Llama:     ${DIM}○ STOPPED${NC}"
     fi
 
     # Grafana check
@@ -227,110 +227,109 @@ for fam, models in sorted(families.items()):
 }
 
 cmd_deploy() {
-    local MODEL_ID="$2"
+    local REPO_ID="$2"
+    local FILENAME="$3"
 
-    if [ -z "$MODEL_ID" ]; then
-        echo -e "${RED}Usage: mirza deploy <model_id|hf_repo>${NC}"
-        echo -e "${DIM}  Voir les modèles disponibles: mirza models${NC}"
+    if [ -z "$REPO_ID" ]; then
+        echo -e "${RED}Usage: mirza deploy <hf_repo_gguf> [filename]${NC}"
+        echo -e "${DIM}  Exemple: mirza deploy Bartowski/Llama-3.2-3B-Instruct-GGUF${NC}"
         return 1
     fi
 
-    # If it's a short ID from our catalog, resolve the HF repo
-    HF_REPO="$MODEL_ID"
-    if [ -f "$MODELS_FILE" ]; then
-        RESOLVED=$(python3 -c "
-import json
-with open('$MODELS_FILE') as f:
-    data = json.load(f)
-for m in data.get('catalog', []):
-    if m['id'] == '$MODEL_ID':
-        print(m['hf_repo'])
-        break
-" 2>/dev/null)
-        if [ -n "$RESOLVED" ]; then
-            HF_REPO="$RESOLVED"
-        fi
-    fi
-
-    echo -e "${BLUE}[↓] Déploiement du modèle sur Mirza...${NC}"
-    echo -e "  Modèle: ${CYAN}${HF_REPO}${NC}"
+    echo -e "${BLUE}[↓] Déploiement llama.cpp sur Mirza...${NC}"
+    echo -e "  Dépôt: ${CYAN}${REPO_ID}${NC}"
+    if [ -n "$FILENAME" ]; then echo -e "  Fichier: ${CYAN}${FILENAME}${NC}"; fi
     echo ""
 
-    # Deploy via SSH: download the model using uv run
-    echo -e "${YELLOW}  Téléchargement en cours (peut prendre plusieurs minutes)...${NC}"
-    remote_exec "cd ~/mirza-ai && uv run python -c \"
-from mlx_lm import load
-print('Téléchargement du modèle...')
-model, tokenizer = load('${HF_REPO}')
-print('Modèle téléchargé avec succès !')
-del model, tokenizer
-\""
+    # Deploy via SSH: using the custom deploy_llama.py in llmServe
+    echo -e "${YELLOW}  Analyse et téléchargement (via hf)...${NC}"
+    remote_exec "cd ~/llmServe && uv run python deploy_llama.py '${REPO_ID}' '${FILENAME}'"
 
     if [ $? -eq 0 ]; then
         echo -e "${GREEN}  ✓ Modèle déployé avec succès !${NC}"
-        echo -e "  Lancer: ${CYAN}mirza serve ${MODEL_ID}${NC}"
+        echo -e "  Lancer: ${CYAN}mirza serve${NC}"
     else
         echo -e "${RED}  ✗ Erreur lors du déploiement.${NC}"
     fi
 }
 
-cmd_serve() {
-    local MODEL_ID="$2"
-    local PORT="${3:-$API_PORT}"
-
-    # Resolve HF repo from catalog if needed
-    HF_REPO=""
-    if [ -n "$MODEL_ID" ] && [ -f "$MODELS_FILE" ]; then
-        HF_REPO=$(python3 -c "
-import json
-with open('$MODELS_FILE') as f:
-    data = json.load(f)
-for m in data.get('catalog', []):
-    if m['id'] == '$MODEL_ID':
-        print(m['hf_repo'])
-        break
-" 2>/dev/null)
+cmd_remove() {
+    local FILENAME="$2"
+    if [ -z "$FILENAME" ]; then
+        echo -e "${RED}Usage: mirza remove <filename.gguf>${NC}"
+        echo -e "${DIM}  Liste des modèles: mirza status (ou ssh ls ~/mirza-models)${NC}"
+        return 1
     fi
 
-    if [ -z "$HF_REPO" ] && [ -n "$MODEL_ID" ]; then
-        HF_REPO="$MODEL_ID"
-    fi
-
-    echo -e "${BLUE}[▶] Démarrage du serveur MLX...${NC}"
-
-    if [ -n "$HF_REPO" ]; then
-        echo -e "  Modèle: ${CYAN}${HF_REPO}${NC}"
-        echo -e "  Port:   ${CYAN}${PORT}${NC}"
-        remote_exec "cd ~/mirza-ai && nohup uv run mlx_lm.server --model '${HF_REPO}' --port ${PORT} > /tmp/mirza-mlx-server.stdout.log 2>/tmp/mirza-mlx-server.stderr.log &"
-        remote_exec "echo '${HF_REPO}' > ~/mirza-ai/.active_model"
+    echo -e "${YELLOW}[-] Suppression du modèle: ${FILENAME}...${NC}"
+    remote_exec "rm -f ~/mirza-models/${FILENAME}"
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}  ✓ Modèle supprimé.${NC}"
     else
-        echo -e "  ${DIM}(modèle actif par défaut)${NC}"
-        remote_exec "bash ~/mirza-ai/start_server.sh"
+        echo -e "${RED}  ✗ Erreur lors de la suppression.${NC}"
     fi
+}
+
+cmd_serve() {
+    local PORT="$API_PORT"
+    local KV_Q="f16"
+    local CTX="4096"
+    local FA="--flash-attn"
+    local EXTRA_FLAGS=""
+
+    # Parsing arguments
+    shift # remove 'serve'
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --kv-q)       KV_Q="$2"; shift 2 ;;
+            --ctx)        CTX="$2"; shift 2 ;;
+            --no-fa)      FA=""; shift ;;
+            --port)       PORT="$2"; shift 2 ;;
+            -*)           EXTRA_FLAGS="$EXTRA_FLAGS $1"; shift ;;
+            *)            EXTRA_FLAGS="$EXTRA_FLAGS $1"; shift ;;
+        esac
+    done
+
+    echo -e "${BLUE}[▶] Démarrage du serveur Llama-CPP...${NC}"
+    echo -e "  Port:      ${CYAN}${PORT}${NC}"
+    echo -e "  Context:   ${CYAN}${CTX}${NC}"
+    echo -e "  KV Cache:  ${CYAN}${KV_Q}${NC}"
+    if [ -n "$FA" ]; then echo -e "  Optim:     ${GREEN}Flash Attention ON${NC}"; fi
+
+    local SERVER_CMD="uv run python serve_llama.py --port $PORT --ctx $CTX --kv-q $KV_Q $FA"
+    
+    remote_exec "cd ~/llmServe && nohup $SERVER_CMD $EXTRA_FLAGS > /tmp/mirza-llm.stdout.log 2>/tmp/mirza-llm.stderr.log &"
 
     echo ""
-
     # Wait for server
     printf "  Attente du serveur"
-    for i in $(seq 1 20); do
-        if curl -sf --max-time 2 "http://${HOST}:${PORT}/v1/models" &>/dev/null; then
+    for i in $(seq 1 30); do
+        if curl -sf --max-time 1 "http://${HOST}:${PORT}/v1/models" &>/dev/null; then
             echo ""
-            echo -e "${GREEN}  ✓ Serveur MLX opérationnel !${NC}"
+            echo -e "${GREEN}  ✓ Serveur opérationnel !${NC}"
             echo -e "  Endpoint: ${YELLOW}http://${HOST}:${PORT}/v1${NC}"
             return 0
         fi
         printf "."
-        sleep 3
+        sleep 2
     done
     echo ""
-    echo -e "${YELLOW}  ⏳ Le serveur met plus de temps que prévu à démarrer.${NC}"
-    echo -e "  ${DIM}Vérifier les logs: mirza ssh puis tail -f /tmp/mirza-mlx-server.stderr.log${NC}"
+    echo -e "${YELLOW}  ⏳ Le serveur démarre lentement...${NC}"
+    echo -e "  ${DIM}Vérifier: mirza ssh puis tail -f /tmp/mirza-llm.stderr.log${NC}"
+}
+
+cmd_stop_llm() {
+    echo -e "${YELLOW}[■] Arrêt du serveur Llama-CPP...${NC}"
+    remote_exec "pkill -f 'llama_cpp.server' 2>/dev/null"
+    echo -e "${GREEN}  ✓ Serveur arrêté.${NC}"
 }
 
 cmd_stop() {
-    echo -e "${YELLOW}[■] Arrêt du serveur MLX...${NC}"
-    remote_exec "pkill -f 'mlx_lm.server' 2>/dev/null"
-    echo -e "${GREEN}  ✓ Serveur arrêté.${NC}"
+    echo -e "${YELLOW}[■] Global Stop: Shutting down all Mirza services...${NC}"
+    cmd_stop_llm
+    cmd_stop_ui
+    echo -e "${GREEN}✓ All services stopped.${NC}"
 }
 
 cmd_chat() {
@@ -440,7 +439,16 @@ cmd_ui() {
 
 cmd_stop_ui() {
     echo -e "${YELLOW}[■] Arrêt de la WebUI Mirza...${NC}"
-    if pkill -f "python3 server.py" 2>/dev/null || pkill -f "python3 -m http.server 3333" 2>/dev/null; then
+    # Target common ways server.py might be running
+    local pids=$(pgrep -f "python.*server.py" || true)
+    
+    # If no pids found by name, try port 3333 (if lsof is available)
+    if [ -z "$pids" ] && command -v lsof >/dev/null 2>&1; then
+        pids=$(lsof -t -i :3333 || true)
+    fi
+
+    if [ -n "$pids" ]; then
+        kill $pids 2>/dev/null
         echo -e "${GREEN}  ✓ WebUI arrêtée.${NC}"
     else
         echo -e "${DIM}  Aucune WebUI Mirza en cours d'exécution.${NC}"
@@ -456,11 +464,13 @@ cmd_help() {
     echo -e "    ${CYAN}mirza sleep${NC}              Mettre en veille"
     echo -e "    ${CYAN}mirza reboot${NC}             Redémarrer"
     echo ""
-    echo -e "  ${BOLD}Intelligence Artificielle${NC}"
-    echo -e "    ${CYAN}mirza models${NC} [catégorie]  Catalogue de modèles MLX"
-    echo -e "    ${CYAN}mirza deploy${NC} <model_id>   Télécharger un modèle sur le serveur"
-    echo -e "    ${CYAN}mirza serve${NC}  [model_id]   Démarrer le serveur d'inférence"
-    echo -e "    ${CYAN}mirza stop-mlx${NC}           Arrêter le serveur d'inférence"
+    echo -e "  ${BOLD}Intelligence Artificielle (llama.cpp)${NC}"
+    echo -e "    ${CYAN}mirza models${NC} [catégorie]  Catalogue de modèles"
+    echo -e "    ${CYAN}mirza deploy${NC} <repo> [file] Déployer un GGUF (via hf)"
+    echo -e "    ${CYAN}mirza remove${NC} <filename>   Supprimer un modèle local"
+    echo -e "    ${CYAN}mirza serve${NC}              Lancer le serveur d'inférence"
+    echo -e "    ${CYAN}mirza stop${NC}               Arrêter tous les services (LLM + UI)"
+    echo -e "    ${CYAN}mirza stop-llm${NC}           Arrêter uniquement le serveur LLM"
     echo -e "    ${CYAN}mirza chat${NC}               Chat interactif en terminal"
     echo ""
     echo -e "  ${BOLD}Interface & Config${NC}"
@@ -484,8 +494,9 @@ case "$1" in
     config)         cmd_config "$@" ;;
     models)         cmd_models "$@" ;;
     deploy)         cmd_deploy "$@" ;;
+    remove|rm-model) cmd_remove "$@" ;;
     serve)          cmd_serve "$@" ;;
-    stop-mlx)       cmd_stop ;;
+    stop-llm)       cmd_stop_llm ;;
     chat)           cmd_chat ;;
     tunnel)         cmd_tunnel "$@" ;;
     ui)             cmd_ui "$@" ;;

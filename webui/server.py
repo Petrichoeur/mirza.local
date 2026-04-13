@@ -124,11 +124,11 @@ def handle_api(path, method, body=None):
     # ── Status ──────────────────────────────────────────
     if path == "/api/status" and method == "GET":
         online = check_ping(HOST_ENV)
-        mlx_api = check_port(HOST_ENV, API_PORT) if online else False
+        llm_api = check_port(HOST_ENV, API_PORT) if online else False
         grafana = check_port(HOST_ENV, 3000) if online else False
 
         active_model = None
-        if mlx_api:
+        if llm_api:
             try:
                 import urllib.request
                 req = urllib.request.urlopen(f"http://{HOST_ENV}:{API_PORT}/v1/models", timeout=3)
@@ -154,7 +154,7 @@ def handle_api(path, method, body=None):
 
         return 200, {
             "server_online": online,
-            "mlx_api": mlx_api,
+            "llm_api": llm_api,
             "grafana": grafana,
             "active_model": active_model,
             "host": HOST_ENV,
@@ -168,7 +168,7 @@ def handle_api(path, method, body=None):
         conf = read_conf()
         if conf:
             return 200, {"config": conf}
-        return 404, {"error": "mirza.conf introuvable. Lancez: mirza config --refresh"}
+        return 404, {"error": "mirza.conf not found. Run: mirza config --refresh"}
 
     if path == "/api/config/refresh" and method == "POST":
         gen_script = MIRZA_DIR / "gen_config.sh"
@@ -185,14 +185,14 @@ def handle_api(path, method, body=None):
                 return 500, {"ok": False, "error": result.stderr[:500]}
             except subprocess.TimeoutExpired:
                 return 500, {"ok": False, "error": "Timeout lors de la génération"}
-        return 404, {"error": "gen_config.sh introuvable"}
+        return 404, {"error": "gen_config.sh not found"}
 
     # ── Models catalog ──────────────────────────────────
     if path == "/api/models" and method == "GET":
         data = read_models()
         if data:
             return 200, data
-        return 404, {"error": "models.json introuvable"}
+        return 404, {"error": "models.json not found"}
 
     # ── Server controls ─────────────────────────────────
     if path == "/api/server/wake" and method == "POST":
@@ -216,42 +216,94 @@ def handle_api(path, method, body=None):
         r = remote_exec(cmd)
         return 200, r
 
-    # ── MLX server controls ─────────────────────────────
-    if path == "/api/mlx/stop" and method == "POST":
-        r = remote_exec("pkill -f 'mlx_lm.server'")
-        return 200, {"ok": True, "message": "Commande d'arrêt envoyée"}
-
-    if path == "/api/mlx/serve" and method == "POST":
-        model = (body or {}).get("model", "")
-        if not model:
-            return 400, {"ok": False, "error": "Aucun modèle spécifié"}
-        cmd = f"cd ~/mirza-ai && nohup uv run mlx_lm.server --model '{model}' --port {API_PORT} > /tmp/mirza-mlx.log 2>&1 &"
+    # ── LLM (Llama-CPP) server controls ─────────────────────────────
+    if path == "/api/llm/stop" and method == "POST":
+        # Use a more robust kill command
+        cmd = "pkill -f 'llama_cpp.server' || true"
         r = remote_exec(cmd)
-        return 200, {"ok": True, "message": f"Démarrage de {model}...", "detail": r}
+        return 200, {"ok": True, "message": "Server stopped", "detail": r}
 
-    if path == "/api/mlx/deploy" and method == "POST":
-        model = (body or {}).get("model", "")
-        hf_repo = (body or {}).get("hf_repo", model)
-        if not hf_repo:
-            return 400, {"ok": False, "error": "Aucun modèle spécifié"}
-        cmd = f"cd ~/mirza-ai && uv run python -c \"from mlx_lm import load; load('{hf_repo}')\""
-        r = remote_exec(cmd, timeout=300)
-        return 200, {"ok": r.get("ok", False), "message": f"Déploiement de {hf_repo}", "detail": r}
+    if path == "/api/llm/download-status" and method == "GET":
+        r = remote_exec("cat /tmp/mirza-download.progress 2>/dev/null || echo 0")
+        prog = r.get("stdout", "0").strip()
+        return 200, {"progress": prog}
 
-    if path == "/api/mlx/logs" and method == "GET":
-        cmd = "echo \"=== LOGS MLX (Remote Time: $(date '+%H:%M:%S')) ===\" && echo \"File: /tmp/mirza-mlx.log\" && echo \"--------------------------------------------------\" && tail -100 /tmp/mirza-mlx.log 2>/dev/null || echo 'Pas de logs disponibles'"
+    if path == "/api/llm/serve" and method == "POST":
+        model_path = (body or {}).get("model", "")
+        if not model_path:
+            # Fallback: find the active model if not specified
+            r = remote_exec("cat ~/llmServe/active_model.json 2>/dev/null")
+            try:
+                active = json.loads(r.get("stdout", "{}"))
+                model_path = active.get("path", "")
+            except: pass
+        
+        if not model_path:
+            return 400, {"ok": False, "error": "No model specified and no active model found."}
+
+        perf = (body or {}).get("perf", {})
+        kv_q  = perf.get("kv_q", "q8_0")   # Default: Q8_0 (best for Apple Silicon)
+        ctx   = int(perf.get("ctx", 8192))
+        fa    = "--flash_attn" if perf.get("flash_attn", True) else ""
+        
+        server_cmd = f"uv run python serve_llama.py --model '{model_path}' --port {API_PORT} --kv_q {kv_q} --ctx {ctx} {fa}"
+        
+        # Kill any previous server first
+        remote_exec("pkill -f 'llama_cpp.server' 2>/dev/null || true")
+        
+        cmd = f"cd ~/llmServe && nohup {server_cmd} > /tmp/mirza-llm.log 2>&1 &"
+        r = remote_exec(cmd)
+        return 200, {"ok": True, "message": "Starting server...", "detail": r}
+
+    if path == "/api/llm/deploy" and method == "POST":
+        repo     = (body or {}).get("hf_repo", "")
+        filename = (body or {}).get("filename", "")
+        hf_token = (body or {}).get("hf_token", "")
+        if not repo:
+            return 400, {"ok": False, "error": "No repository specified"}
+        
+        # Build command, add token arg if provided
+        token_arg = f"--token '{hf_token}'" if hf_token else ""
+        # Clear previous log and run in background
+        deploy_cmd = f"uv run python deploy_llama.py '{repo}' '{filename}' {token_arg}"
+        cmd = f"rm -f /tmp/mirza-deploy.log && touch /tmp/mirza-deploy.log && cd ~/llmServe && nohup {deploy_cmd} > /tmp/mirza-deploy.log 2>&1 &"
+        
+        r = remote_exec(cmd)
+        return 200, {
+            "ok": r.get("ok", False), 
+            "message": f"Deployment started for {repo}", 
+            "detail": r
+        }
+
+    if path == "/api/llm/deploy-logs" and method == "GET":
+        # Tail the deployment specific log
+        cmd = "tail -100 /tmp/mirza-deploy.log 2>/dev/null || echo 'No deployment logs available yet'"
         r = remote_exec(cmd)
         return 200, {"logs": r.get("stdout", "")}
 
-    if path == "/api/mlx/installed" and method == "GET":
-        cmd = "ls -1 ~/.cache/huggingface/hub/ 2>/dev/null | grep '^models--' | sed 's/^models--//' | sed 's/--/\\//g'"
+    if path == "/api/llm/remove" and method == "POST":
+        filename = (body or {}).get("filename", "")
+        if not filename:
+            return 400, {"ok": False, "error": "No file specified"}
+        # Basic security: ensure no path traversal
+        filename = os.path.basename(filename)
+        r = remote_exec(f"rm -f ~/mirza-models/{filename}")
+        return 200, {"ok": r.get("ok", False), "message": f"Suppression de {filename}", "detail": r}
+
+    if path == "/api/llm/logs" and method == "GET":
+        cmd = "echo \"=== LOGS LLM (Remote Time: $(date '+%H:%M:%S')) ===\" && echo \"File: /tmp/mirza-llm.log\" && echo \"--------------------------------------------------\" && tail -100 /tmp/mirza-llm.log 2>/dev/null || echo 'Pas de logs disponibles'"
+        r = remote_exec(cmd)
+        return 200, {"logs": r.get("stdout", "")}
+
+    if path == "/api/llm/installed" and method == "GET":
+        # Check ~/mirza-models directory
+        cmd = "ls -1 ~/mirza-models/ 2>/dev/null | grep '.gguf$'"
         r = remote_exec(cmd)
         installed = []
         if r.get("ok") and r.get("stdout"):
             for line in r["stdout"].split("\n"):
-                line = line.strip()
-                if line:
-                    installed.append(line)
+                if line.strip():
+                    installed.append(line.strip())
         return 200, {"installed": installed}
 
     print(f"\n[DEBUG] 404 Triggered on path: '{path}' method: '{method}'")
@@ -316,9 +368,9 @@ class MirzaHandler(http.server.SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     print()
-    print("\033[0;34m  ╔══════════════════════════════════════════╗\033[0m")
-    print("\033[0;34m  ║\033[0m    \033[1mMirza AI\033[0m — Station Control Panel     \033[0;34m║\033[0m")
-    print("\033[0;34m  ╚══════════════════════════════════════════╝\033[0m")
+    print("  \u2554" + "\u2550"*42 + "\u2557")
+    print("  \u2551    Mirza AI \u2014 Station Control Panel     \u2551")
+    print("  \u255a" + "\u2550"*42 + "\u255d")
     print()
     print(f"  Interface:  \033[1;33mhttp://localhost:{PORT}\033[0m")
     print(f"  Mirza:      \033[2m{HOST_ENV}:{API_PORT}\033[0m")

@@ -1,24 +1,27 @@
-# Mirza -- Local AI Station on Apple Silicon
+# Mirza — Local AI Inference Station on Apple Silicon
 
-> Turn a Mac Mini into a headless AI inference server, piloted remotely from any Linux box.
-> No screen, no keyboard, no cloud subscription. Just SSH, bash, and unified memory.
+> Turn a Mac Mini (or any Apple Silicon Mac) into a headless, dedicated AI inference server.  
+> Controlled entirely from a remote Linux machine via CLI and a full-featured WebUI.  
+> No cloud. No API keys. No display required. Just SSH, unified memory, and Metal acceleration.
 
 ---
 
 ## Table of Contents
 
 - [What Is This](#what-is-this)
+- [Architecture Overview](#architecture-overview)
 - [Prerequisites](#prerequisites)
 - [Project Structure](#project-structure)
-- [Phase 1 -- macOS Preparation (GUI Required)](#phase-1----macos-preparation-gui-required)
-- [Phase 2 -- Network Configuration](#phase-2----network-configuration)
-- [Phase 3 -- Client Installation](#phase-3----client-installation)
-- [Phase 4 -- First Contact](#phase-4----first-contact)
-- [Phase 5 -- Monitoring (Grafana + Prometheus)](#phase-5----monitoring-grafana--prometheus)
-- [Phase 6 -- AI Deployment (MLX)](#phase-6----ai-deployment-mlx)
-- [Phase 7 -- The WebUI](#phase-7----the-webui)
+- [Phase 1 — macOS Preparation (GUI Required)](#phase-1--macos-preparation-gui-required)
+- [Phase 2 — Network Configuration](#phase-2--network-configuration)
+- [Phase 3 — Client Installation](#phase-3--client-installation)
+- [Phase 4 — First Contact & Server Setup](#phase-4--first-contact--server-setup)
+- [Phase 5 — Monitoring Stack (Grafana + Prometheus)](#phase-5--monitoring-stack-grafana--prometheus)
+- [Phase 6 — AI Inference (Llama.cpp / GGUF)](#phase-6--ai-inference-llamacpp--gguf)
+- [Phase 7 — The WebUI](#phase-7--the-webui)
 - [CLI Reference](#cli-reference)
 - [API Reference](#api-reference)
+- [Inference Configuration](#inference-configuration)
 - [Key File Locations](#key-file-locations)
 - [Troubleshooting](#troubleshooting)
 - [Roadmap](#roadmap)
@@ -28,25 +31,54 @@
 
 ## What Is This
 
-Mirza is a complete toolkit for turning a Mac Mini (or any Apple Silicon Mac, really) into a **dedicated, headless AI inference server** that you control entirely from a remote Linux machine.
+Mirza is a complete remote management and AI inference toolkit. The Mac sits headless on your local network (Ethernet, no monitor), and you control it entirely from a Linux client machine through:
 
-The Mac sits on your local network, plugged into Ethernet, with no display attached. You manage it through a CLI (`mirza`) and/or a WebUI served from your client machine. Models run locally using Apple's MLX framework, which takes full advantage of the unified memory architecture. No data leaves your network. No API key required. Just math and silicon.
+- **`mirza` CLI** — A bash CLI with 16 commands for server management, model downloads, inference control, and chat.
+- **WebUI** — A full single-page application with Dashboard, Chat, Model Catalog, Config, Monitoring, and Documentation tabs.
+- **REST API** — A Python backend (`server.py`) that relays commands over SSH and exposes a clean JSON API.
 
-It also deploys a full monitoring stack (Grafana + Prometheus + Macmon) so you can watch your hardware sweat in real time. Because if you're going to push 24 GB of unified memory to its limits, you might as well look at a graph while you do it.
+Inference runs via **llama-cpp-python** with Metal acceleration, serving an **OpenAI-compatible API** on port 8080. Any tool, library, or application that speaks the OpenAI protocol works out of the box.
+
+---
+
+## Architecture Overview
+
+```
+┌─────────────────────────────────┐          ┌──────────────────────────────────────┐
+│        Linux Client             │          │         Mac Mini (mirza.local)        │
+│                                 │          │                                       │
+│  ┌───────────┐   ┌───────────┐  │   SSH    │  ┌──────────────────────────────┐    │
+│  │  mirza    │   │ WebUI     │  │ ◄──────► │  │  llama-cpp-python (uv venv)  │    │
+│  │  CLI      │   │ server.py │  │          │  │  ┌──────────────────────────┐│    │
+│  │ (mirza.sh)│   │ :3333     │  │   API    │  │  │ llama_cpp.server  :8080  ││    │
+│  └───────────┘   │ + app.js  │  │ ◄──────► │  │  │ OpenAI-compatible API    ││    │
+│                  └───────────┘  │          │  │  └──────────────────────────┘│    │
+│                                 │          │  │  GGUF Models: ~/mirza-models/ │    │
+│                  Browser        │          │  └──────────────────────────────┘    │
+│                  localhost:3333 │          │                                       │
+│                                 │          │  ┌──────────────────────────────┐    │
+│                  HuggingFace API│          │  │  Monitoring Stack             │    │
+│                  (live catalog) │          │  │  Grafana :3000                │    │
+│                                 │          │  │  Prometheus :9090             │    │
+└─────────────────────────────────┘          │  │  Macmon :9091 (Apple Silicon) │    │
+                                             │  └──────────────────────────────┘    │
+                                             └──────────────────────────────────────┘
+```
 
 ---
 
 ## Prerequisites
 
 | Component | Requirement |
-|---|---|
-| **Target Machine** | Any Mac with Apple Silicon (M1, M2, M3, M4). Intel Macs are paperweights for this use case. |
-| **macOS Version** | Tahoe 26.x |
-| **Client Machine** | Linux (Ubuntu 24.04 LTS tested). WSL2 works but will remind you it's Windows at every opportunity. |
-| **Bash** | 5.2+ |
-| **SSH** | OpenSSH 9.x |
-| **Network** | Wired Ethernet, CAT6 minimum. Wi-Fi is for watching YouTube, not serving 9 billion parameters. |
-| **Patience** | Non-trivial. Xcode is 12 GB. Model downloads can take hours. |
+|-----------|-------------|
+| **Target Machine** | Any Mac with Apple Silicon (M1, M2, M3, M4 — all variants). Intel Macs not supported. |
+| **macOS Version** | macOS 13 Ventura or later. macOS 15 Sequoia / 26 Tahoe tested. |
+| **Client Machine** | Linux (Ubuntu 24.04 LTS recommended). WSL2 works but is slower. |
+| **Bash** | 5.2+ on the client |
+| **Python** | 3.11+ on the client (for `server.py`) |
+| **SSH** | OpenSSH 9.x on both ends |
+| **Network** | Wired Ethernet (CAT6 minimum). Wi-Fi is for video, not 26B-parameter inference. |
+| **Xcode** | Required on the Mac for Metal-accelerated compilation of llama-cpp-python |
 
 ---
 
@@ -54,252 +86,236 @@ It also deploys a full monitoring stack (Grafana + Prometheus + Macmon) so you c
 
 ```text
 mirza.local/
-|
-|-- mirza/                           Client-side tools (your Linux machine)
-|   |-- mirza.sh                     Main CLI (15 commands)
-|   |-- gatcha.sh                    SSH key exchange and environment setup
-|   |-- gen_config.sh                Remote config generator (populates mirza.conf via SSH)
-|   |-- mirza.conf                   Auto-generated config file (do not edit manually)
-|
-|-- mirzaServer/                     Server-side scripts (deployed TO the Mac)
-|   |-- monitoring/
-|   |   |-- setup_monitoring.sh      Installs Grafana, Prometheus, Macmon, configures crontab
-|   |   |-- *.json                   Pre-built Grafana dashboard definitions
-|   |-- ai/
-|   |   |-- setup_mlx.sh             Installs uv, MLX, mlx-lm, creates LaunchAgent
-|   |   |-- models.json              Curated model catalog with RAM tiers and categories
-|   |-- utils/
-|       |-- baptism.sh               Renames the Mac hostname
-|       |-- .zshrc                   Recommended shell config for the server
-|
-|-- webui/                           WebUI (runs on your client machine)
-|   |-- index.html                   Layout: dashboard, chat, models, config, monitoring, docs
-|   |-- style.css                    Design system (dark theme, violet accents)
-|   |-- app.js                       Full application logic, HuggingFace API integration
-|   |-- server.py                    Python backend (REST API, SSH relay, static file serving)
-|   |-- serve.sh                     Quick-start script for the WebUI
-|
-|-- docs/
-|   |-- MCP_ROADMAP.md               Roadmap for Model Context Protocol integration
-|
-|-- installation.sh                  One-command client setup (deps, symlink, SSH keys, deploy)
-|-- README.md                        This file
-|-- readmeFR.md                      French version
-|-- LICENSE                          GPLv3
+│
+├── mirza/                          Client-side tools (your Linux machine)
+│   ├── mirza.sh                    Main CLI — 16 commands
+│   ├── gatcha.sh                   SSH key exchange and env var injection
+│   ├── gen_config.sh               Connects to the Mac via SSH and populates mirza.conf
+│   └── mirza.conf                  Auto-generated config file (do not edit manually)
+│
+├── mirzaServer/                    Server-side scripts (deployed TO the Mac via rsync)
+│   ├── monitoring/
+│   │   ├── setup_monitoring.sh     Installs Grafana, Prometheus, Macmon, configures crontab @reboot
+│   │   └── *.json                  Pre-built Grafana dashboard definitions
+│   ├── ai/
+│   │   └── models.json             Local model catalog fallback (WebUI now uses live HF API)
+│   └── utils/
+│       ├── baptism.sh              Renames the Mac hostname to "mirza"
+│       └── .zshrc                  Recommended Zsh config for the server
+│
+├── llmServe/                       AI backend (deployed TO the Mac, managed by uv)
+│   ├── pyproject.toml              Python dependencies: llama-cpp-python, huggingface-hub, tqdm
+│   ├── serve_llama.py              Wraps llama_cpp.server with advanced inference flags
+│   ├── deploy_llama.py             Downloads GGUF models from HuggingFace with progress tracking
+│   └── active_model.json           Written on each download; tracks the currently active model
+│
+├── webui/                          WebUI (runs on your client machine, port 3333)
+│   ├── index.html                  SPA layout: Dashboard, Chat, Models, Config, Monitoring, Docs
+│   ├── style.css                   Design system: dark theme, violet accents, glass morphism
+│   ├── app.js                      Full application logic, HuggingFace live API integration
+│   └── server.py                   Python backend: REST API, SSH relay, static file serving
+│
+├── docs/
+│   └── MCP_ROADMAP.md              Roadmap for Model Context Protocol integration
+│
+├── installation.sh                 One-command client setup: deps, CLI symlink, SSH keys, deploy
+├── README.md                       This file (English)
+├── readmeFR.md                     French version
+└── LICENSE                         GPLv3
 ```
 
 ---
 
-## Phase 1 -- macOS Preparation (GUI Required)
+## Phase 1 — macOS Preparation (GUI Required)
 
-This is the only time you need a monitor plugged into the Mac. Make the most of it.
+This is the only time you need a monitor plugged into the Mac.
 
 ### 1. Prevent Sleep
 
-**System Settings > Displays > Advanced...** -- Check "Prevent automatic sleeping when the display is off."
+**System Settings → Displays → Advanced...** — Enable "Prevent automatic sleeping when the display is off."
 
-**System Settings > Energy** -- Enable "Start up automatically after a power failure" and "Wake for network access."
+**System Settings → Energy** — Enable "Start up automatically after a power failure" and "Wake for network access."
 
-The Mac must never sleep on its own. It's a server now.
+The Mac must **never sleep on its own**. It is a server now.
 
 ### 2. Set the Hostname
 
-**System Settings > General > Sharing** -- At the bottom, under "Local hostname", click "Edit..." and set it to `mirza`.
+**System Settings → General → Sharing** — Under "Local hostname", click "Edit..." and set it to `mirza`.
 
-This creates `mirza.local` on the local network via mDNS/Bonjour. No more memorizing IP addresses.
+This makes the Mac reachable at `mirza.local` via mDNS/Bonjour on your LAN.
 
-### 3. Enable Remote Login
+### 3. Enable Remote Login (SSH)
 
-Still in Sharing: enable **Remote Login** (this is SSH). Add your user account to the allowed users list.
+Still in Sharing — enable **Remote Login**. Add your user account to the allowed list.
 
-Optional: Enable **Screen Sharing** (VNC) if you want a safety net for the first few days. You'll stop using it once you trust the CLI. Probably.
+Optionally enable **Screen Sharing** (VNC) as a safety net for initial setup.
 
 ### 4. Install Xcode
 
-Open the App Store and download Xcode. It's around 12 GB. Go do something else for a while.
-
-Xcode is required because Apple ships their compiler toolchain inside it. `setup_mlx.sh` needs it to compile Python packages with Metal support.
-
-After Xcode installs, accept the license from the terminal:
+Download Xcode from the App Store (~12–16 GB). Accept the license:
 
 ```bash
 sudo xcodebuild -license accept
 ```
 
-You can now unplug the monitor. The Mac is on its own.
+Xcode is required to compile **llama-cpp-python** with Metal GPU support.
+
+After Xcode is done, unplug the monitor. The Mac is now a server.
 
 ---
 
-## Phase 2 -- Network Configuration
+## Phase 2 — Network Configuration
 
-A server that changes IP at every reboot is a server you'll grow to hate.
+Assign a **static DHCP lease** to the Mac's Ethernet MAC address in your router's admin interface. This ensures the IP never changes.
 
-1. Log into your router's admin interface (usually `192.168.1.1`).
-2. Navigate to DHCP settings / Static Leases.
-3. Assign a fixed IP (for example, `192.168.1.87`) to the Mac's Ethernet MAC address.
-4. To find the MAC address, run this on the Mac (before unplugging the screen):
-   ```bash
-   networksetup -getmacaddress Ethernet
-   ```
-5. If `mirza.local` doesn't resolve after a reboot, your router may be doing IGMP Snooping. Disable it.
+```bash
+# On the Mac (before unplugging the screen):
+networksetup -getmacaddress Ethernet
+```
+
+> If `mirza.local` doesn't resolve, check that your router isn't filtering mDNS (disable IGMP Snooping if needed).
 
 ---
 
-## Phase 3 -- Client Installation
-
-Clone the repo on your Linux machine:
+## Phase 3 — Client Installation
 
 ```bash
 git clone <repo-url> ~/git/mirza.local
 cd ~/git/mirza.local
-```
-
-Run the installation script:
-
-```bash
 chmod +x installation.sh
 ./installation.sh
 ```
 
-This script does four things, in order:
+The installation script does the following in order:
 
 | Step | What it does |
-|---|---|
-| **1. Dependencies** | Installs `jq`, `curl`, `wakeonlan`, `python3`, `ssh` via your package manager. |
-| **2. CLI Symlink** | Creates `~/.local/bin/mirza` pointing to `mirza/mirza.sh`. Adds `~/.local/bin` to your PATH if needed. |
-| **3. SSH Keys** | Optionally runs `gatcha.sh` to generate a dedicated SSH keypair (`~/.ssh/mirza_key`) and copy it to the Mac. Also injects `MIRZA_HOST`, `MIRZA_USER`, and `MIRZA_MAC_ADRESS` into your `~/.bashrc`. |
-| **4. Server Deployment** | Optionally copies `mirzaServer/` to `~/mirzaServer/` on the Mac via rsync. |
+|------|-------------|
+| **1. System Dependencies** | Installs `jq`, `curl`, `wakeonlan`, `python3`, `ssh`, `rsync` via apt/pacman/dnf |
+| **2. CLI Symlink** | Creates `~/.local/bin/mirza → mirza/mirza.sh`. Adds `~/.local/bin` to `$PATH` if missing |
+| **3. Connectivity Check** | Verifies SSH reachability on `mirza.local:22` |
+| **4. Server Deployment** | `rsync` the `mirzaServer/` **and** `llmServe/` directories to the Mac |
+| **5. AI Environment Init** | SSH into the Mac and runs `cd ~/llmServe && uv sync` to install Python dependencies |
+| **Monitoring (optional)** | Runs `setup_monitoring.sh` remotely to install Grafana, Prometheus, Macmon |
 
-After the script finishes:
+After installation:
 
 ```bash
 source ~/.bashrc
 mirza status
 ```
 
-If you see "ONLINE", you're in business.
-
 ---
 
-## Phase 4 -- First Contact
+## Phase 4 — First Contact & Server Setup
 
 ```bash
+# Interactive SSH session
 mirza ssh
-```
 
-You're now on the Mac. Run the server-side setup scripts in order.
-
-### Rename the host (optional, if not already done)
-
-```bash
+# On the Mac — rename the hostname (if not already done via System Settings)
 chmod +x ~/mirzaServer/utils/baptism.sh
 ~/mirzaServer/utils/baptism.sh
 ```
 
+Generate or refresh the local configuration file:
+
+```bash
+mirza config --refresh
+```
+
+This connects to the Mac via SSH, collects hardware info (chip, RAM, GPU cores, macOS version), and writes it to `mirza/mirza.conf`.
+
 ---
 
-## Phase 5 -- Monitoring (Grafana + Prometheus)
+## Phase 5 — Monitoring Stack (Grafana + Prometheus)
 
-Running inference without monitoring is denial. The stack:
+The monitoring stack is installed automatically during `installation.sh`. It can also be triggered manually:
+
+```bash
+# On the Mac via SSH
+bash ~/mirzaServer/monitoring/setup_monitoring.sh
+```
 
 | Component | Port | Role |
-|---|---|---|
+|-----------|------|------|
 | **Grafana** | 3000 | Dashboard visualization |
 | **Prometheus** | 9090 | Metrics collection and storage |
-| **Macmon** | 9091 | Apple Silicon metrics exporter (CPU, GPU, ANE, thermal, power) |
+| **Macmon** | 9091 | Apple Silicon-specific exporter: CPU/GPU/ANE power, temps, RAM, core clusters |
+| **node_exporter** | 9100 | Standard OS metrics: disk, network, filesystem |
 
-### Installation (on the Mac, via SSH)
+All services auto-start after reboot via `crontab @reboot` entries.
 
-```bash
-chmod +x ~/mirzaServer/monitoring/setup_monitoring.sh
-~/mirzaServer/monitoring/setup_monitoring.sh
-```
-
-This script:
-- Installs Grafana, Prometheus, and Macmon via Homebrew.
-- Configures Prometheus to scrape Macmon metrics.
-- Imports a pre-built Grafana dashboard ("Mirza Monitor Lite").
-- Adds `@reboot` crontab entries so all services start automatically after a reboot. No manual intervention needed.
-
-### Grafana database location
-
-The Grafana database (dashboards, users, preferences) is stored at:
-
-```
-/opt/homebrew/var/lib/grafana/grafana.db
-```
-
-If you need to back it up or reset Grafana, that's the file.
-
-### Accessing Grafana
-
-From your browser: `http://mirza.local:3000`
-
-From the WebUI: the Monitoring tab embeds Grafana directly via iframe in kiosk mode.
+**Accessing Grafana:**
+- Direct: `http://mirza.local:3000`
+- Via WebUI: The Monitoring tab embeds Grafana in kiosk mode via iframe
 
 ---
 
-## Phase 6 -- AI Deployment (MLX)
+## Phase 6 — AI Inference (Llama.cpp / GGUF)
 
-MLX is Apple's machine learning framework, optimized for Apple Silicon. It uses unified memory, which means the GPU, CPU, and Neural Engine all share the same RAM pool. No PCIe bottleneck. No VRAM limit separate from system RAM.
+Mirza uses **llama-cpp-python** with Metal acceleration. The backend runs in a `uv`-managed virtual environment at `~/llmServe` on the Mac.
 
-### Installation (on the Mac, via SSH)
+### Model Storage
+
+All downloaded GGUF files are stored in:
+```
+~/mirza-models/           (on the Mac)
+```
+
+Active model metadata is tracked in `~/llmServe/active_model.json`.
+
+### Downloading Models
 
 ```bash
-chmod +x ~/mirzaServer/ai/setup_mlx.sh
-~/mirzaServer/ai/setup_mlx.sh
+# Via CLI (auto-selects best quantization)
+mirza deploy ggml-org/gemma-3-4b-it-GGUF
+
+# Via CLI (specify exact file)
+mirza deploy ggml-org/Qwen2.5-Coder-7B-Q8_0-GGUF Qwen2.5-Coder-7B-Q8_0.gguf
+
+# Via WebUI — Models tab → "↓ Télécharger"
+# Shows real-time download progress bar
 ```
 
-This installs:
-- **uv**: A Rust-based Python package manager. Fast. Very fast.
-- **MLX and mlx-lm**: The inference engine and its LLM serving layer.
-- A LaunchAgent for automatic server startup.
-
-### Where are models stored?
-
-`mlx-lm` uses the Hugging Face cache. All downloaded models land in:
-
-```
-~/.cache/huggingface/hub/
-```
-
-on the Mac. This is where your disk space goes.
-
-### Managing models from the CLI
+### Starting the Inference Server
 
 ```bash
-mirza models              # List compatible models from the curated catalog
-mirza models code         # Filter by category
-mirza deploy qwen3.5-9b-4bit  # Download a model to the Mac
-mirza serve qwen3.5-9b-4bit   # Start the inference server with this model
-mirza stop-mlx            # Stop the inference server
+# Default: 8k context, Q8_0 KV cache, Flash Attention ON
+mirza serve
+
+# Advanced options
+mirza serve --ctx 32768 --kv-q q8_0 --no-fa --port 8080
 ```
 
-### The inference API
-
-`mlx-lm` serves an **OpenAI-compatible REST API** on port 8080. You can use it with any tool that speaks OpenAI's protocol:
+The server exposes an **OpenAI-compatible REST API**:
 
 ```bash
 curl http://mirza.local:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
-  -d '{"model": "mlx-community/Qwen3.5-9B-MLX-4bit", "messages": [{"role": "user", "content": "Hello"}]}'
+  -d '{"model": "auto", "messages": [{"role": "user", "content": "Hello"}]}'
+```
+
+### Managing Models
+
+```bash
+mirza models                        # List all compatible models (from local catalog)
+mirza deploy <hf-repo> [filename]   # Download a GGUF model from HuggingFace
+mirza remove <filename>             # Delete a model file from ~/mirza-models
+mirza stop-llm                      # Kill the inference server
 ```
 
 ---
 
-## Phase 7 -- The WebUI
+## Phase 7 — The WebUI
 
-The WebUI is a single-page application served from your client machine. It communicates with the Mac via the Python backend (`server.py`), which relays commands over SSH.
+The WebUI is a single-page application served from your Linux machine, communicating with the Mac via the Python REST backend.
 
 ### Starting the WebUI
 
 ```bash
 mirza ui
+# Opens http://localhost:3333
 ```
-
-This starts `server.py` on port 3333 and opens an SSH tunnel to the MLX API if needed.
-
-Open `http://localhost:3333` in your browser.
 
 ### Stopping the WebUI
 
@@ -307,103 +323,153 @@ Open `http://localhost:3333` in your browser.
 mirza stop-ui
 ```
 
-### WebUI Features
+### WebUI Tabs
 
-| Tab | What it does |
-|---|---|
-| **Dashboard** | Server status, hardware info, active model, quick actions (wake, sleep, reboot, stop MLX), live logs. |
-| **Chat** | Full chat interface with streaming, multi-provider support (local MLX, OpenAI, Anthropic, Groq, Mistral, Ollama), conversation history, MCP tools. |
-| **Models** | Live catalog fetched from the HuggingFace API (mlx-community, top 100 by downloads). Each model card shows: estimated size, KV cache overhead, 6 GB OS overhead, estimated tok/s for your specific chip, Flash/Paged Attention support, and compatibility warnings. |
-| **Config** | Displays the contents of `mirza.conf`. Can regenerate the config via SSH. |
-| **Monitoring** | Embedded Grafana dashboard in kiosk mode. |
-| **Documentation** | Built-in usage guide. |
+| Tab | Description |
+|-----|-------------|
+| **Dashboard** | Server status (online/offline), hardware info (chip, CPU, GPU, RAM), active model, quick action buttons (Wake, Stop LLM, Sleep, Reboot), live LLM logs |
+| **Chat** | Full streaming chat interface. Multi-provider (local LLM, OpenAI, Anthropic, Groq, Mistral, Ollama). Conversation history, MCP tool integration |
+| **Models** | Live catalog from `ggml-org` on HuggingFace. Capability badges (MoE, Vision, Audio, Embedding, Tools, Long Context, Code, Reasoning). RAM filtering, family/category filters, Top 10 recommendations, download progress bar |
+| **Config** | Displays `mirza.conf` contents. "Refresh" button re-runs `gen_config.sh` remotely |
+| **Monitoring** | Grafana dashboard embedded in kiosk mode via iframe |
+| **Documentation** | Built-in usage guide |
 
-### How model recommendations work
+### Model Catalog — How It Works
 
-The WebUI parses each model's name to extract parameters (e.g., "9B") and quantization (e.g., "4bit"), then calculates:
+The WebUI fetches real-time data from `huggingface.co/api/models?author=ggml-org`. For each model, it:
 
-1. **Model weight size** = Parameters x (Bits / 8)
-2. **KV Cache estimate** = 1.5 GB (small models) or 3 GB (models > 15B params)
-3. **OS overhead** = 6 GB (reserved for macOS and background processes)
-4. **Minimum RAM required** = Weight size + KV Cache + OS overhead
-5. **Estimated tok/s** = Chip memory bandwidth / Model weight size
+1. Detects capabilities from the repo name and HuggingFace tags: MoE, Vision/Multimodal, Audio, Embedding/RAG, Function Calling, Long Context, Code, Reasoning
+2. Extracts parameters (e.g., `26B`, `E4B → 4B`, `0.5B`) and quantization (e.g., `Q4_K_M`, `Q8_0`)
+3. Estimates RAM usage: `model_size_gb + kv_cache_gb + 4 GB (OS overhead)`  
+   → MoE models use only ~20% active parameters, so memory estimates are adjusted accordingly
+4. Estimates tokens/sec based on chip memory bandwidth (`M4 ~120 GB/s`, `M4 Pro ~200 GB/s`, `M4 Max ~400 GB/s`, `M4 Ultra ~800 GB/s`)
+5. Models that exceed your RAM are grayed out. Models fitting your hardware get a **⭐ Top Mirza** recommendation.
 
-Models that don't fit in your RAM are grayed out with disabled buttons. Models that are a good fit for your hardware are tagged "Optimized for this Mac."
+### Inference Configuration Modal
+
+When clicking "▶ Servir" on any model card, a modal opens with:
+
+| Parameter | Options | Default |
+|-----------|---------|---------|
+| **Context Window (n_ctx)** | 2k / 4k / 8k / 16k / 32k / 128k | 8k |
+| **KV Cache Quantization** | F16 (max precision), Q8_0 (recommended), Q4_0 (max savings) | Q8_0 |
+| **Flash Attention** | On/Off | On |
 
 ---
 
 ## CLI Reference
 
-All commands use the format `mirza <command> [arguments]`.
+All commands use the format `mirza <command> [options]`.
 
 ### Server Management
 
 | Command | Description |
-|---|---|
-| `mirza start` | Send a Wake-on-LAN packet to the Mac. |
-| `mirza ssh` | Open an interactive SSH session. |
-| `mirza status` | Check if the server, MLX API, and Grafana are running. |
-| `mirza sleep` | Put the Mac to sleep via `pmset sleepnow`. |
-| `mirza reboot` | Reboot the Mac via `sudo shutdown -r now`. |
+|---------|-------------|
+| `mirza start` | Send a Wake-on-LAN magic packet to the Mac |
+| `mirza ssh` | Open an interactive SSH session on the Mac |
+| `mirza status` | Check server ping, LLM API (port 8080), Grafana (port 3000), active model |
+| `mirza sleep` | Put the Mac to sleep via `pmset sleepnow` |
+| `mirza reboot` | Reboot the Mac via `sudo shutdown -r now` |
 
-### AI Management
-
-| Command | Description |
-|---|---|
-| `mirza models [category]` | Display the curated model catalog, filtered by RAM compatibility. Categories: `general`, `code`, `reasoning`, `multimodal`, `light`, `french`. |
-| `mirza deploy <model_id>` | Download a model to the Mac (accepts catalog IDs or full HuggingFace repo paths). |
-| `mirza serve [model_id]` | Start the MLX inference server. Uses the last deployed model if none specified. |
-| `mirza stop-mlx` | Kill the MLX inference server. |
-| `mirza chat` | Interactive terminal chat session. |
-
-### Interface and Config
+### AI Model Management
 
 | Command | Description |
-|---|---|
-| `mirza ui` | Launch the WebUI on port 3333. Creates an SSH tunnel if needed. |
-| `mirza stop-ui` | Kill the WebUI process. |
-| `mirza tunnel [port]` | Create an SSH tunnel to the MLX API (default: port 8080). |
-| `mirza config` | Display the current configuration. |
-| `mirza config --refresh` | Regenerate `mirza.conf` by querying the Mac via SSH. |
+|---------|-------------|
+| `mirza models [category]` | Display the local model catalog, filtered by RAM. Categories: `general`, `code`, `reasoning`, `multimodal`, `light` |
+| `mirza deploy <hf-repo> [file]` | Download a GGUF model from HuggingFace. Auto-selects best quantization if no file specified |
+| `mirza remove <filename>` | Delete a model file from `~/mirza-models` on the Mac |
+| `mirza serve [options]` | Start the llama.cpp inference server |
+| `mirza stop-llm` | Kill the inference server (`pkill -f llama_cpp.server`) |
+| `mirza chat` | Interactive terminal chat (multi-turn, conversation history) |
+
+#### `mirza serve` Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--ctx <n>` | `4096` | Context window size (tokens) |
+| `--kv-q <type>` | `f16` | KV cache quantization: `f16`, `q8_0`, `q4_0` |
+| `--no-fa` | *(Flash Attention ON)* | Disable Flash Attention |
+| `--port <n>` | `8080` | API port |
+
+### Interface & Config
+
+| Command | Description |
+|---------|-------------|
+| `mirza ui` | Launch the WebUI on port 3333. Auto-creates SSH tunnel to LLM API if needed |
+| `mirza stop-ui` | Kill the WebUI server process |
+| `mirza tunnel [port]` | Create an SSH local tunnel to the inference API |
+| `mirza config` | Display the current `mirza.conf` |
+| `mirza config --refresh` | Regenerate `mirza.conf` by querying the Mac via SSH |
 
 ---
 
 ## API Reference
 
-The WebUI backend (`server.py`) exposes these endpoints:
+The WebUI backend (`webui/server.py`) runs on port 3333 and exposes:
 
 | Method | Endpoint | Description |
-|---|---|---|
-| GET | `/api/status` | Server status, hardware info, active model. |
-| GET | `/api/config` | Contents of `mirza.conf` as JSON. |
-| POST | `/api/config/refresh` | Regenerate `mirza.conf` via SSH. |
-| GET | `/api/models` | Curated model catalog from `models.json`. |
-| POST | `/api/server/wake` | Send Wake-on-LAN packet. |
-| POST | `/api/server/sleep` | Put the Mac to sleep. |
-| POST | `/api/server/reboot` | Reboot the Mac. |
-| POST | `/api/mlx/serve` | Start MLX server with `{"model": "repo/name"}`. |
-| POST | `/api/mlx/stop` | Stop the MLX server. |
-| POST | `/api/mlx/deploy` | Download a model with `{"hf_repo": "repo/name"}`. |
-| GET | `/api/mlx/logs` | Last 30 lines of the MLX server log. |
+|--------|----------|-------------|
+| `GET` | `/api/status` | Server ping, LLM API status, Grafana status, active model, hardware info from mirza.conf |
+| `GET` | `/api/config` | Contents of `mirza.conf` as JSON |
+| `POST` | `/api/config/refresh` | Run `gen_config.sh` remotely and return updated config |
+| `GET` | `/api/models` | Local model catalog (from `models.json`) — used as fallback/metadata |
+| `POST` | `/api/server/wake` | Send Wake-on-LAN packet via `wakeonlan` |
+| `POST` | `/api/server/sleep` | `pmset sleepnow` on the Mac |
+| `POST` | `/api/server/reboot` | `sudo shutdown -r now` on the Mac |
+| `POST` | `/api/llm/serve` | Start the llama.cpp server with inference params (model, ctx, kv_q, flash_attn) |
+| `POST` | `/api/llm/stop` | Kill the inference server |
+| `GET` | `/api/llm/download-status` | Poll download progress from `/tmp/mirza-download.progress` on the Mac |
+| `POST` | `/api/llm/deploy` | Download a GGUF model. Body: `{hf_repo, filename?, hf_token?}` |
+| `POST` | `/api/llm/remove` | Delete a model file. Body: `{filename}` |
+| `GET` | `/api/llm/logs` | Last 100 lines of `/tmp/mirza-llm.log` from the Mac |
+| `GET` | `/api/llm/installed` | List `.gguf` files in `~/mirza-models/` on the Mac |
+
+---
+
+## Inference Configuration
+
+### KV Cache Quantization (via `--kv_q`)
+
+| Type | Memory Savings | Quality | When to use |
+|------|----------------|---------|-------------|
+| `f16` | Baseline | Full precision | Always enough RAM, research use |
+| `q8_0` | ~50% | Negligible loss | **Default recommendation** for Apple Silicon |
+| `q4_0` | ~75% | Slight degradation | Very tight RAM (e.g., 8 GB Mac running a 7B model) |
+
+### Flash Attention
+
+Enabled by default. Dramatically reduces KV cache memory footprint during long contexts. Always use it on Apple Silicon (Metal-accelerated).
+
+### Context Window
+
+Set via `--ctx`. Larger context uses more KV cache RAM:
+- 8k tokens ≈ `~1–2 GB` additional RAM
+- 32k tokens ≈ `~4–8 GB` additional RAM (model-dependent)
+- 128k tokens: only recommended on 64–192 GB systems
 
 ---
 
 ## Key File Locations
 
 | What | Where | Machine |
-|---|---|---|
-| CLI script | `mirza/mirza.sh` | Client (Linux) |
-| CLI symlink | `~/.local/bin/mirza` | Client (Linux) |
-| Configuration | `mirza/mirza.conf` | Client (Linux) |
-| SSH private key | `~/.ssh/mirza_key` | Client (Linux) |
-| Environment variables | `~/.bashrc` (MIRZA_HOST, MIRZA_USER, MIRZA_MAC_ADRESS) | Client (Linux) |
-| WebUI backend | `webui/server.py` | Client (Linux) |
-| Model catalog | `mirzaServer/ai/models.json` | Both |
-| Downloaded models | `~/.cache/huggingface/hub/` | Server (Mac) |
-| Grafana database | `/opt/homebrew/var/lib/grafana/grafana.db` | Server (Mac) |
-| Prometheus data | `/opt/homebrew/var/prometheus/` | Server (Mac) |
-| MLX server logs | `/tmp/mirza-mlx.log` | Server (Mac) |
-| Monitoring setup | `~/mirzaServer/monitoring/setup_monitoring.sh` | Server (Mac) |
+|------|-------|---------|
+| CLI script | `mirza/mirza.sh` | Linux client |
+| CLI symlink | `~/.local/bin/mirza` | Linux client |
+| Configuration | `mirza/mirza.conf` | Linux client |
+| SSH private key | `~/.ssh/mirza_key` | Linux client |
+| Env vars | `~/.bashrc` — `MIRZA_HOST`, `MIRZA_USER`, `MIRZA_MAC_ADRESS` | Linux client |
+| WebUI backend | `webui/server.py` | Linux client |
+| WebUI frontend | `webui/{index.html,style.css,app.js}` | Linux client |
+| AI backend env | `~/llmServe/` (uv project with pyproject.toml) | Mac server |
+| Inference script | `~/llmServe/serve_llama.py` | Mac server |
+| Deploy script | `~/llmServe/deploy_llama.py` | Mac server |
+| Active model | `~/llmServe/active_model.json` | Mac server |
+| Downloaded models | `~/mirza-models/*.gguf` | Mac server |
+| Download progress | `/tmp/mirza-download.progress` | Mac server |
+| LLM server logs | `/tmp/mirza-llm.log` | Mac server |
+| Monitoring scripts | `~/mirzaServer/monitoring/` | Mac server |
+| Grafana database | `/opt/homebrew/var/lib/grafana/grafana.db` | Mac server |
+| Prometheus data | `/opt/homebrew/var/prometheus/` | Mac server |
 
 ---
 
@@ -411,53 +477,103 @@ The WebUI backend (`server.py`) exposes these endpoints:
 
 ### "mirza: command not found"
 
-The symlink at `~/.local/bin/mirza` isn't in your PATH. Run:
+The symlink `~/.local/bin/mirza` isn't in your PATH yet. Fix:
+
 ```bash
 source ~/.bashrc
 ```
 
-### "Catalogue non trouve: .../.local/mirzaServer/ai/models.json"
+### "MIRZA_USER non configuré" in server.py
 
-You're running an old version of `mirza.sh` that doesn't resolve symlinks correctly. Pull the latest version and re-run `installation.sh`.
+The environment variable `MIRZA_USER` is missing. Run:
 
-### "Address already in use" when starting the WebUI
+```bash
+mirza config --refresh
+source ~/.bashrc
+```
 
-A previous `server.py` process is still running. Kill it:
+Or set it manually: `export MIRZA_USER=youruser`
+
+### Download timeout
+
+The inference scripts have a max SSH timeout of 10 minutes (`timeout=600`). For very large models (>30 GB), consider downloading directly on the Mac:
+
+```bash
+mirza ssh
+cd ~/llmServe
+uv run python deploy_llama.py ggml-org/gemma-4-31B-it-GGUF
+```
+
+### "Address already in use" on port 3333
+
+A previous `server.py` is still running:
+
 ```bash
 mirza stop-ui
 ```
 
-### mirza.local doesn't resolve
+### `mirza.local` doesn't resolve
 
-- Make sure the Mac is on and connected to Ethernet.
-- Make sure your router isn't filtering mDNS (check IGMP Snooping).
-- As a fallback, use the Mac's static IP directly.
+1. Confirm the Mac is on and Ethernet-connected
+2. Check your router for IGMP Snooping — disable it
+3. Fallback: use the Mac's static IP directly (e.g., `export MIRZA_HOST=192.168.1.87`)
 
-### Grafana is blank after a reboot
+### Inference server doesn't start
 
-The `setup_monitoring.sh` script installs `@reboot` crontab entries. If they're missing, re-run the script. It will not wipe existing Grafana data.
+Check the logs:
 
-### Models are too slow
+```bash
+# On the Mac
+tail -50 /tmp/mirza-llm.log
+tail -50 /tmp/mirza-llm.stderr.log
 
-Check `mirza status` to confirm the model is running. Then check Grafana for memory pressure. If the Mac is swapping, the model is too large for your RAM. Use a smaller quantization or a smaller model.
+# Or via mirza CLI
+mirza ssh -t "tail -50 /tmp/mirza-llm.log"
+```
+
+### Models are very slow / Mac is swapping
+
+Check Grafana for memory pressure. If RAM usage exceeds 90%, the model is too large. Try:
+- A smaller quantization (`Q4_K_M` instead of `Q8_0`)
+- A smaller parameter count (7B instead of 14B)
+- Enable `Q4_0` KV cache quantization in the serve modal
+
+---
+
+## Environment Variables
+
+| Variable | Description | Set by |
+|----------|-------------|--------|
+| `MIRZA_HOST` | Mac hostname or IP (`mirza.local` or `192.168.1.87`) | `gatcha.sh` / manual |
+| `MIRZA_USER` | SSH username on the Mac | `gatcha.sh` / manual |
+| `MIRZA_MAC_ADRESS` | Ethernet MAC address (for Wake-on-LAN) | `gatcha.sh` / manual |
+| `MIRZA_API_PORT` | LLM inference API port (default: `8080`) | Optional override |
+| `MIRZA_WEBUI_PORT` | WebUI port (default: `3333`) | Optional override |
 
 ---
 
 ## Roadmap
 
-- [x] CLI for remote Mac management
-- [x] Monitoring stack (Grafana + Prometheus + Macmon)
-- [x] OpenAI-compatible inference API (mlx-lm)
-- [x] WebUI with chat, dashboard, model catalog
-- [x] Grafana embedded in the WebUI
-- [x] Dynamic model catalog from HuggingFace API
+- [x] CLI for complete remote Mac management (16 commands)
+- [x] Monitoring stack: Grafana + Prometheus + Macmon (Apple Silicon metrics)
+- [x] OpenAI-compatible inference API via llama-cpp-python + Metal
+- [x] WebUI: Dashboard, Chat, Models, Config, Monitoring, Docs
+- [x] Live model catalog from HuggingFace (`ggml-org` organization)
 - [x] Hardware-aware model recommendations with tok/s estimation
-- [ ] MCP server for agentic workflows (filesystem, web search, code execution)
-- [ ] Model benchmarking across chip variants (M1 through M4 Ultra)
-- [ ] Multi-model serving (serve several models on different ports)
+- [x] Rich capability badges: MoE, Vision, Audio, Embedding, Tools, Long Context
+- [x] Advanced inference configuration: n_ctx, KV cache quantization, Flash Attention
+- [x] Real-time download progress bar
+- [x] HuggingFace token support for gated models
+- [x] Model deletion from CLI and WebUI
+- [x] Auto-kill previous server on new serve request
+- [ ] MCP server integration for agentic workflows (filesystem, web search, code execution)
+- [ ] Multi-model serving (multiple models on different ports simultaneously)
+- [ ] Model benchmarking harness across chip variants (M1 → M4 Ultra)
+- [ ] TurboQuant integration for post-hoc quantization
+- [ ] Conversation export (Markdown, JSON)
 
 ---
 
 ## License
 
-GPLv3. Copy it, distribute it, modify it. Keep it open.
+GPLv3. Copy it, fork it, modify it. Keep it open.

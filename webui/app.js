@@ -7,7 +7,7 @@
 // Default Providers (for chat)
 // =================================================================
 const DEFAULT_PROVIDERS = [
-    { id: 'mirza-local', name: 'Mirza (Local MLX)', type: 'local', endpoint: 'http://localhost:8080', apiKey: '', model: '' },
+    { id: 'mirza-local', name: 'Mirza (Llama.cpp)', type: 'local', endpoint: 'http://localhost:8080', apiKey: '', model: '' },
     { id: 'openai', name: 'OpenAI', type: 'cloud', endpoint: 'https://api.openai.com', apiKey: '', model: 'gpt-4o-mini' },
     { id: 'anthropic-openai', name: 'Anthropic', type: 'cloud', endpoint: 'https://api.anthropic.com/v1', apiKey: '', model: 'claude-sonnet-4-20250514' },
     { id: 'groq', name: 'Groq', type: 'cloud', endpoint: 'https://api.groq.com/openai', apiKey: '', model: 'llama-3.3-70b-versatile' },
@@ -29,7 +29,17 @@ const state = {
     modelsCatalog: null,
     installedModels: [],
     modelsTab: 'all',
+    activeOrgs: new Set(['ggml-org']),   // Which orgs to fetch — toggled by org chips
     dashboardData: null,
+    isDownloading: false,
+    downloadInterval: null,
+    selectedInferenceModel: null, // Model path currently targeted for serving
+    inferenceConfig: {
+        ctx: 8192,
+        kv_q: 'q8_0',
+        flash_attn: true,
+        paged_kv: false
+    },
     settings: {
         temperature: 0.7,
         maxTokens: 4096,
@@ -59,11 +69,15 @@ function initDom() {
         'providers-list', 'link-grafana', 'toast-container',
         'btn-refresh-status', 'btn-refresh-logs', 'btn-refresh-config',
         'dash-server-status', 'dash-host', 'dash-ip', 'dash-api', 'dash-grafana',
+        'mcp-search', 'mcp-family', 'mcp-category', 'mcp-ram', 'mcp-sort',
+        'modal-inference-options', 'overlay-inference', 'btn-close-inference', 'btn-start-serve',
+        'option-kv-q', 'option-flash-attn', 'option-paged-kv',
+        'global-download-progress', 'download-percent', 'download-progress-bar', 'download-status-text',
         'dash-chip', 'dash-cpu', 'dash-gpu', 'dash-ram',
         'dash-model-name', 'dash-model-sub', 'dash-logs',
         'dashboard-grid', 'models-grid', 'config-container',
         'filter-category', 'filter-ram',
-        'action-wake', 'action-stop-mlx', 'action-sleep', 'action-reboot',
+        'action-wake', 'action-stop-llm', 'action-sleep', 'action-reboot',
         'nav-monitoring'
     ];
     ids.forEach(id => { dom[id.replace(/-/g, '_')] = document.getElementById(id.replace(/-/g, '_')) || document.getElementById(id); });
@@ -127,9 +141,18 @@ function initDom() {
     dom.tabModelsInstalled = document.getElementById('tab-models-installed');
     dom.tabModelsTop10 = document.getElementById('tab-models-top10');
     dom.actionWake = document.getElementById('action-wake');
-    dom.actionStopMlx = document.getElementById('action-stop-mlx');
+    dom.actionStopLlm = document.getElementById('action-stop-llm');
     dom.actionSleep = document.getElementById('action-sleep');
     dom.actionReboot = document.getElementById('action-reboot');
+    dom.perfKvCache = document.getElementById('perf-kv-cache');
+    dom.perfPrefillStep = document.getElementById('perf-prefill-step');
+
+    // New Download Activity Widget
+    dom.dashSectionDownload = document.getElementById('dash-section-download');
+    dom.dashDownloadLabel = document.getElementById('dash-download-label');
+    dom.dashDownloadPercent = document.getElementById('dash-download-percent');
+    dom.dashDownloadProgressBar = document.getElementById('dash-download-progress-bar');
+    dom.dashDownloadLogs = document.getElementById('dash-download-logs');
 }
 
 // =================================================================
@@ -146,9 +169,9 @@ function init() {
 }
 
 function loadState() {
-    try { const s = localStorage.getItem('mirza_conversations'); if (s) state.conversations = JSON.parse(s); } catch(e) {}
-    try { const s = localStorage.getItem('mirza_settings'); if (s) Object.assign(state.settings, JSON.parse(s)); } catch(e) {}
-    try { const s = localStorage.getItem('mirza_providers'); state.providers = s ? JSON.parse(s) : JSON.parse(JSON.stringify(DEFAULT_PROVIDERS)); } catch(e) { state.providers = JSON.parse(JSON.stringify(DEFAULT_PROVIDERS)); }
+    try { const s = localStorage.getItem('mirza_conversations'); if (s) state.conversations = JSON.parse(s); } catch (e) { }
+    try { const s = localStorage.getItem('mirza_settings'); if (s) Object.assign(state.settings, JSON.parse(s)); } catch (e) { }
+    try { const s = localStorage.getItem('mirza_providers'); state.providers = s ? JSON.parse(s) : JSON.parse(JSON.stringify(DEFAULT_PROVIDERS)); } catch (e) { state.providers = JSON.parse(JSON.stringify(DEFAULT_PROVIDERS)); }
     state.activeProviderId = localStorage.getItem('mirza_active_provider') || 'mirza-local';
     state.activeConversationId = localStorage.getItem('mirza_active_conversation');
 
@@ -214,6 +237,12 @@ function switchView(viewName) {
 
     if (viewName === 'config' && dom.configContainer.children.length <= 1) loadConfig();
     if (viewName === 'models' && !state.modelsCatalog) loadModelsCatalog();
+
+    // Auto-load dashboard data + logs when switching to dashboard
+    if (viewName === 'dashboard') {
+        loadDashboard();
+        loadLogs(true);  // silent = true: don't show "loading..." if logs are already visible
+    }
 
     dom.sidebar.classList.remove('open');
 }
@@ -306,22 +335,29 @@ function setupEventListeners() {
 
     // Dashboard actions
     dom.btnRefreshStatus.addEventListener('click', loadDashboard);
-    dom.btnRefreshLogs.addEventListener('click', loadLogs);
-    dom.dashLogs.addEventListener('click', loadLogs);
+    dom.btnRefreshLogs.addEventListener('click', () => loadLogs(false));
+    dom.dashLogs.addEventListener('click', () => loadLogs(false));
+    // Clear logs button (clears display only, not the file on server)
+    const btnClearLogs = document.getElementById('btn-clear-logs');
+    if (btnClearLogs) {
+        btnClearLogs.addEventListener('click', () => {
+            dom.dashLogs.innerHTML = '<span style="color:#555">Affichage effacé. Cliquer pour recharger.</span>';
+        });
+    }
     dom.actionWake.addEventListener('click', () => apiAction('/api/server/wake', 'Envoi du Wake-on-LAN...'));
-    dom.actionStopMlx.addEventListener('click', () => {
-        if (confirm('Arrêter le serveur MLX ?')) apiAction('/api/mlx/stop', 'Arrêt du serveur MLX...');
+    dom.actionStopLlm.addEventListener('click', () => {
+        if (confirm('Stop the inference server?')) apiAction('/api/llm/stop', 'Stopping server...');
     });
     dom.actionSleep.addEventListener('click', () => {
         const pwd = prompt('Mot de passe administrateur du Mac requis pour la mise en veille :');
         if (pwd !== null) {
-            apiAction('/api/server/sleep', 'Mise en veille...', { sudoAsk: pwd });
+            apiAction('/api/server/sleep', 'Entering sleep mode...', { sudoAsk: pwd });
         }
     });
     dom.actionReboot.addEventListener('click', () => {
         const pwd = prompt('Mot de passe administrateur du Mac requis pour le redémarrage :');
         if (pwd !== null) {
-            apiAction('/api/server/reboot', 'Redémarrage...', { sudoAsk: pwd });
+            apiAction('/api/server/reboot', 'Rebooting station...', { sudoAsk: pwd });
         }
     });
 
@@ -330,10 +366,33 @@ function setupEventListeners() {
 
     // Models filters
     dom.filterCategory.addEventListener('change', renderFilteredModels);
-    if(dom.filterFamily) dom.filterFamily.addEventListener('change', renderFilteredModels);
+    if (dom.filterFamily) dom.filterFamily.addEventListener('change', renderFilteredModels);
     dom.filterRam.addEventListener('change', renderFilteredModels);
-    if(dom.filterSort) dom.filterSort.addEventListener('change', renderFilteredModels);
-    if(dom.filterSearch) dom.filterSearch.addEventListener('input', renderFilteredModels);
+    if (dom.filterSort) dom.filterSort.addEventListener('change', renderFilteredModels);
+    if (dom.filterSearch) dom.filterSearch.addEventListener('input', renderFilteredModels);
+    // Context filter — re-renders all cards with recalculated KV cache / RAM
+    const ctxFilterEl = document.getElementById('filter-context');
+    if (ctxFilterEl) ctxFilterEl.addEventListener('change', renderFilteredModels);
+
+    // Org source chips — toggle which org(s) to load
+    document.querySelectorAll('.org-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            const org = chip.dataset.org;
+            if (state.activeOrgs.has(org)) {
+                // Don't allow deselecting all
+                if (state.activeOrgs.size > 1) {
+                    state.activeOrgs.delete(org);
+                    chip.classList.remove('active');
+                }
+            } else {
+                state.activeOrgs.add(org);
+                chip.classList.add('active');
+            }
+            // Reload catalog with new org selection
+            state.modelsCatalog = null;
+            loadModelsCatalog();
+        });
+    });
 
     if (dom.tabModelsAll) {
         dom.tabModelsAll.addEventListener('click', () => {
@@ -368,7 +427,10 @@ function setupEventListeners() {
 // Dashboard
 // =================================================================
 async function loadDashboard() {
-    setDashStatus('loading', 'Vérification...');
+    // Prevent duplicate polling loops
+    if (state.dashPollTimer) clearTimeout(state.dashPollTimer);
+
+    setDashStatus('loading', 'Verifying...');
 
     try {
         const res = await fetch('/api/status', { signal: AbortSignal.timeout(10000) });
@@ -376,7 +438,7 @@ async function loadDashboard() {
         state.dashboardData = data;
 
         if (data.server_online) {
-            setDashStatus('online', 'En ligne');
+            setDashStatus('online', 'Online');
         } else {
             setDashStatus('offline', 'Hors ligne');
         }
@@ -389,10 +451,10 @@ async function loadDashboard() {
         if (!dom.dashIp.classList.contains('obscured-ip')) {
             dom.dashIp.textContent = actualIp;
         }
-        
-        dom.dashApi.textContent = data.mlx_api ? `✓ Port ${data.api_port}` : '✗ Arrêté';
-        dom.dashApi.style.color = data.mlx_api ? 'var(--color-success)' : 'var(--color-text-tertiary)';
-        dom.dashGrafana.textContent = data.grafana ? '✓ Port 3000' : '✗ Arrêté';
+
+        dom.dashApi.textContent = data.llm_api ? `✓ Port ${data.api_port}` : '✗ Stopped';
+        dom.dashApi.style.color = data.llm_api ? 'var(--color-success)' : 'var(--color-text-tertiary)';
+        dom.dashGrafana.textContent = data.grafana ? '✓ Port 3000' : '✗ Stopped';
         dom.dashGrafana.style.color = data.grafana ? 'var(--color-success)' : 'var(--color-text-tertiary)';
 
         if (data.server_online && !data.config_available && !window._hasTriedGenerateConfig) {
@@ -412,9 +474,9 @@ async function loadDashboard() {
             dom.dashRam.textContent = '...';
         } else {
             dom.dashChip.textContent = data.hardware?.chip || '—';
-            dom.dashCpu.textContent = data.hardware?.cpu_cores ? `${data.hardware.cpu_cores} cœurs` : '—';
-            dom.dashGpu.textContent = data.hardware?.gpu_cores ? `${data.hardware.gpu_cores} cœurs` : '—';
-            dom.dashRam.textContent = data.hardware?.ram_gb ? `${data.hardware.ram_gb} Go` : '—';
+            dom.dashCpu.textContent = data.hardware?.cpu_cores ? `${data.hardware.cpu_cores} cores` : '—';
+            dom.dashGpu.textContent = data.hardware?.gpu_cores ? `${data.hardware.gpu_cores} cores` : '—';
+            dom.dashRam.textContent = data.hardware?.ram_gb ? `${data.hardware.ram_gb} GB` : '—';
         }
 
         if (data.active_model) {
@@ -422,21 +484,31 @@ async function loadDashboard() {
             dom.dashModelName.textContent = short;
             dom.dashModelSub.textContent = data.active_model;
         } else {
-            dom.dashModelName.textContent = 'Aucun';
-            dom.dashModelSub.textContent = data.mlx_api ? 'Aucun modèle chargé' : 'Serveur MLX arrêté';
+            dom.dashModelName.textContent = 'None';
+            dom.dashModelSub.textContent = data.llm_api ? 'No model loaded' : 'Server Stopped';
+        }
+
+        // Show/Hide Download Activity section
+        if (state.isDownloading && dom.dashSectionDownload) {
+            dom.dashSectionDownload.style.display = 'block';
+        } else if (dom.dashSectionDownload) {
+            dom.dashSectionDownload.style.display = 'none';
         }
 
         // Update Grafana iframe (always use mirza.local for reliable access)
-        const grafanaUrl = `http://${data.host || 'mirza.local'}:3000/d/ad5vxgh/mirza-monitor-lite?kiosk`;
+        const grafanaUrl = `http://${data.host || 'mirza.local'}:3000/d/f09f8d8e-mirza-monitor-lite/mirza-monitor-lite?kiosk`;
         const iframe = document.getElementById('grafana-iframe');
         if (iframe && iframe.src !== grafanaUrl && iframe.src !== grafanaUrl + '/') {
             iframe.src = grafanaUrl;
         }
 
     } catch (e) {
-        setDashStatus('offline', 'Erreur de connexion');
+        setDashStatus('offline', 'Connection Error');
         console.error('Dashboard error:', e);
     }
+
+    // Schedule next poll (loop only if we are still on dashboard or need background status)
+    state.dashPollTimer = setTimeout(loadDashboard, 3000);
 }
 
 function setDashStatus(status, text) {
@@ -444,23 +516,74 @@ function setDashStatus(status, text) {
 }
 
 async function loadLogs(silent = false) {
-    if (!silent) dom.dashLogs.textContent = 'Chargement...';
+    if (!silent) dom.dashLogs.innerHTML = '<span style="color:#666">Loading logs...</span>';
     try {
-        const res = await fetch('/api/mlx/logs');
+        const res = await fetch('/api/llm/logs');
         const data = await res.json();
-        if (data.logs) {
-            dom.dashLogs.textContent = data.logs;
-            // Auto-scroll to bottom if it's already near bottom or it's a silent update
-            const isScrolledToBottom = dom.dashLogs.scrollHeight - dom.dashLogs.clientHeight <= dom.dashLogs.scrollTop + 50;
-            if (isScrolledToBottom || silent) {
+        if (data.logs && data.logs.trim()) {
+            // Performance: Slice to last 1000 lines to prevent browser freeze on large log files
+            const lines = data.logs.split('\n');
+            const truncated = lines.length > 1000 ? lines.slice(-1000).join('\n') : data.logs;
+
+            dom.dashLogs.innerHTML = colorizeLog(truncated);
+
+            // Auto-scroll if already near bottom
+            const atBottom = dom.dashLogs.scrollHeight - dom.dashLogs.clientHeight <= dom.dashLogs.scrollTop + 80;
+            if (atBottom || !silent) {
                 dom.dashLogs.scrollTop = dom.dashLogs.scrollHeight;
             }
         } else if (!silent) {
-            dom.dashLogs.textContent = 'Aucun log disponible';
+            dom.dashLogs.innerHTML = '<span style="color:#555">No logs available \u2014 the llama.cpp server has not been started yet.</span>';
         }
     } catch (e) {
-        if (!silent) dom.dashLogs.textContent = `Erreur: ${e.message}`;
+        if (!silent) dom.dashLogs.innerHTML = `<span style="color:var(--color-error)">Error: ${e.message}</span>`;
     }
+}
+
+/**
+ * Colorize llama.cpp / Mirza log output for the terminal-style panel.
+ * Maps log levels and patterns to colors.
+ */
+function colorizeLog(raw) {
+    return raw
+        .split('\n')
+        .map(line => {
+            const escaped = line
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+
+            // Error lines
+            if (/error|erreur|fail|failed|exception|critical|fatal/i.test(line)) {
+                return `<span style="color:#f87171">${escaped}</span>`;
+            }
+            // Warnings
+            if (/warn|warning|attention|deprecat/i.test(line)) {
+                return `<span style="color:#fbbf24">${escaped}</span>`;
+            }
+            // Server ready / success
+            if (/ready|running|started|success|listening|loaded|✓|opérationnel/i.test(line)) {
+                return `<span style="color:#34d399">${escaped}</span>`;
+            }
+            // Mirza header lines
+            if (/^\[Mirza\]|^\s*Mod[eè]le|^\s*Contexte|^\s*KV Cache|^\s*Flash|^\s*GPU|^\s*Commande/i.test(line)) {
+                return `<span style="color:#818cf8">${escaped}</span>`;
+            }
+            // Model loading progress (llama.cpp output)
+            if (/llm_load|ggml_|metal_|cuda_|clblast_/i.test(line)) {
+                return `<span style="color:#60a5fa">${escaped}</span>`;
+            }
+            // HTTP request logs
+            if (/POST|GET|DELETE|PUT|\d{3}\s/i.test(line) && /\/v1\//i.test(line)) {
+                return `<span style="color:#a8b4c8">${escaped}</span>`;
+            }
+            // Separator / header lines
+            if (/^[=\-]{5,}|^═+|^╔|^╚/.test(line)) {
+                return `<span style="color:#4b5563">${escaped}</span>`;
+            }
+            return `<span style="color:#c9d1d9">${escaped}</span>`;
+        })
+        .join('\n');
 }
 
 async function apiAction(endpoint, message, extraBody = null) {
@@ -484,129 +607,562 @@ async function apiAction(endpoint, message, extraBody = null) {
 // =================================================================
 // Models Catalog
 // =================================================================
-async function loadModelsCatalog() {
+
+/**
+ * Fetch per-file sizes from HuggingFace tree API.
+ * Returns a map: filename -> size_gb (float)
+ */
+async function fetchGgufFileSizes(repoId) {
     try {
-        dom.modelsGrid.innerHTML = `<div class="mcp-empty">Chargement des paramètres...</div>`;
-        const res = await fetch('/api/models');
-        const localData = await res.json();
-        
-        dom.modelsGrid.innerHTML = `<div class="mcp-empty">Interrogation de HuggingFace API (mlx-community)...</div>`;
-        const hfRes = await fetch('https://huggingface.co/api/models?author=mlx-community&limit=1000&sort=downloads&direction=-1');
-        const hfModels = await hfRes.json();
-
-        // Fetch installed models
-        try {
-            const instRes = await fetch('/api/mlx/installed');
-            const instData = await instRes.json();
-            if (instData.installed) {
-                state.installedModels = instData.installed;
-            }
-        } catch (e) {
-            console.warn("Could not fetch installed models", e);
+        const res = await fetch(`https://huggingface.co/api/models/${repoId}/tree/main`);
+        if (!res.ok) return {};
+        const tree = await res.json();
+        const map = {};
+        for (const f of tree) {
+            if (!f.path?.toLowerCase().endsWith('.gguf')) continue;
+            // LFS stores actual size, 'size' field is the pointer file size
+            const rawSize = f.lfs?.size || f.size || 0;
+            const filename = f.path.split('/').pop();
+            map[filename] = Math.round(rawSize / 1e9 * 10) / 10;
         }
-        
-        const catalog = [];
-        for (const model of hfModels) {
-            const hf_repo = model.id;
-            const name_parts = hf_repo.split('/')[1] || hf_repo;
-            
-            // Extract Params 
-            let parameters = "N/A";
-            const paramMatch = name_parts.match(/(\d+(?:\.\d+)?[BT]|\d+x\d+(?:\.\d+)?[BT])/i);
-            if (paramMatch) parameters = paramMatch[1].toUpperCase();
+        return map;
+    } catch { return {}; }
+}
 
-            // Extract Quantization
-            let quantization = "Unknown";
-            const quantMatch = name_parts.match(/(\d+bit)/i);
-            if (quantMatch) quantization = quantMatch[1];
-            
-            let family = name_parts.split('-')[0];
-            
-            let paramsNum = parseFloat(parameters.replace('B','').replace('T','000'));
-            if (parameters.includes('X')) {
-                const parts = parameters.toLowerCase().split('x');
-                paramsNum = parseFloat(parts[0]) * parseFloat(parts[1].replace('b',''));
-            }
-            if (isNaN(paramsNum)) paramsNum = 7;
-            
-            let bits = 8;
-            if (quantization !== "Unknown") bits = parseInt(quantization.replace('bit',''));
-            
-            let size_gb = Math.round((paramsNum * (bits / 8) + 0.5) * 10) / 10;
-            // OS Overhead 4GB + KV Cache Approx (1.5GB to 3GB)
-            let kv_cache_gb = paramsNum > 15 ? 3 : 1.5;
-            let min_ram_gb = Math.ceil(size_gb + kv_cache_gb + 4); 
-            
-            let cats = [];
-            let tag = (model.pipeline_tag || "").toLowerCase();
-            let nLower = name_parts.toLowerCase();
-            if (tag.includes('vision') || tag.includes('image') || nLower.includes('vision') || nLower.includes('vl')) cats.push('multimodal');
-            if (nLower.includes('coder') || nLower.includes('code') || nLower.includes('instruct-code')) cats.push('code');
-            cats.push('general');
-            if (nLower.includes('french') || nLower.includes('mistral') || nLower.includes('mixtral')) cats.push('french');
-            
-            catalog.push({
-                hf_repo: hf_repo,
-                name: name_parts,
-                family: family,
-                parameters: parameters,
-                quantization: quantization,
-                size_gb: size_gb,
-                kv_cache_gb: kv_cache_gb,
-                min_ram_gb: min_ram_gb,
-                categories: cats,
-                description: `Téléchargements: ${model.downloads.toLocaleString()} | Pipeline: ${model.pipeline_tag || "Non spécifié"}`,
-                downloads: model.downloads
-            });
-        }
-        
-        // Ensure all installed models appear in the catalog even if they aren't in top 100
-        for (const inst of state.installedModels) {
-            if (!catalog.find(c => (c.hf_repo || '').toLowerCase().trim() === inst.toLowerCase().trim())) {
-                catalog.push({
-                    hf_repo: inst,
-                    name: inst.split('/').pop() || inst,
-                    family: "Local / Cache",
-                    parameters: "N/A",
-                    quantization: "N/A",
-                    size_gb: 0,
-                    kv_cache_gb: 0,
-                    min_ram_gb: 4,
-                    categories: ["general"],
-                    description: "Modèle présent dans votre cache local mais non répertorié dans le top 100 en ligne.",
-                    downloads: 0
-                });
+/**
+ * Fetch gguf metadata (total, context_length, architecture) from model API.
+ */
+async function fetchModelMeta(repoId) {
+    try {
+        const res = await fetch(`https://huggingface.co/api/models/${repoId}`);
+        if (!res.ok) return null;
+        const data = await res.json();
+        return {
+            gguf: data.gguf || {},   // {total, context_length, architecture, ...}
+            gated: data.gated || false,
+        };
+    } catch { return null; }
+}
+
+/**
+ * Select the best GGUF file from the size map.
+ * Priority: Q4_K_M > Q5_K_M > Q4_K_S > Q4_0 > Q8_0 > anything
+ */
+function pickBestGguf(sizeMap) {
+    const files = Object.keys(sizeMap).filter(f => !f.startsWith('mmproj'));
+    if (!files.length) return null;
+    const priority = ['Q4_K_M', 'Q4_K_S', 'Q5_K_M', 'Q5_0', 'Q4_0', 'Q8_0', 'Q2_K', 'IQ4_XS'];
+    for (const p of priority) {
+        const match = files.find(f => f.toUpperCase().includes(p));
+        if (match) return { name: match, size_gb: sizeMap[match] };
+    }
+    // Fallback: smallest GGUF (avoid bf16/f16 which are huge)
+    const sorted = files.filter(f => !/bf16|f16/i.test(f)).sort((a, b) => sizeMap[a] - sizeMap[b]);
+    if (sorted.length) return { name: sorted[0], size_gb: sizeMap[sorted[0]] };
+    return { name: files[0], size_gb: sizeMap[files[0]] };
+}
+
+/**
+ * Fetch ALL models from a HuggingFace organisation using pagination.
+ * The HF API caps results at 100 per call; we follow Link headers (cursor-based)
+ * until there are no more pages. Falls back to offset pagination if needed.
+ *
+ * @param {string} org - HuggingFace organisation name (e.g. 'ggml-org')
+ * @param {boolean} excludeLora - Skip LoRA adapter repos (default: true)
+ * @param {number} maxModels - Max models to fetch (default: 500)
+ * @returns {Promise<Array>} Full list of model objects from HF
+ */
+async function fetchWithRetry(url, options = {}, retries = 3, backoff = 2000, onRetry) {
+    try {
+        const res = await fetch(url, options);
+        if (res.status === 429 || res.status === 503) {
+            if (retries > 0) {
+                if (onRetry) onRetry(backoff / 1000, 3 - retries + 1);
+                await new Promise(r => setTimeout(r, backoff));
+                return fetchWithRetry(url, options, retries - 1, backoff * 2.5, onRetry);
             }
         }
-
-        localData.catalog = catalog;
-        state.modelsCatalog = localData;
-        populateFilters(localData);
-        renderFilteredModels();
+        return res;
     } catch (e) {
-        dom.modelsGrid.innerHTML = `<div class="mcp-empty">Erreur: ${escapeHtml(e.message)}</div>`;
+        if (retries > 0) {
+            await new Promise(r => setTimeout(r, backoff));
+            return fetchWithRetry(url, options, retries - 1, backoff * 2.5, onRetry);
+        }
+        throw e;
     }
 }
 
+async function fetchAllHfModels(org, excludeLora = true, maxModels = 500) {
+    const PAGE_SIZE = 100;
+    const BASE = 'https://huggingface.co';
+    const allModels = [];
+    let nextUrl = `${BASE}/api/models?author=${org}&limit=${PAGE_SIZE}&sort=downloads&direction=-1`;
+
+    while (nextUrl && allModels.length < maxModels) {
+        let res;
+        try {
+            res = await fetchWithRetry(nextUrl, {}, 3, 2000, (wait, attempt) => {
+                const p = dom.modelsGrid.querySelector('.mcp-empty p');
+                if (p) {
+                    p.innerHTML = `HuggingFace is busy (Rate Limit).<br/>` +
+                        `<span style="font-size:0.8rem; color:var(--color-warning)">Waiting ${Math.round(wait)}s for cooldown (Attempt ${attempt}/3)...</span>`;
+                }
+            });
+        } catch (e) {
+            console.warn('[Mirza] HF API fetch error, stopping pagination:', e);
+            break;
+        }
+
+        if (!res.ok) {
+            console.warn(`[Mirza] HF API error ${res.status} for ${nextUrl}`);
+            break;
+        }
+
+        const batch = await res.json();
+        if (!Array.isArray(batch) || batch.length === 0) break;
+
+        allModels.push(...batch);
+        console.log(`[Mirza] ggml-org: fetched ${allModels.length} models so far...`);
+
+        // Follow HF's cursor-based Link header: <URL>; rel="next"
+        const linkHeader = res.headers.get('Link') || '';
+        const nextMatch = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+        if (nextMatch) {
+            nextUrl = nextMatch[1].startsWith('http') ? nextMatch[1] : BASE + nextMatch[1];
+        } else if (batch.length === PAGE_SIZE) {
+            // Fallback: try offset if no Link header but full page returned
+            const currentOffset = allModels.length - batch.length;
+            const newOffset = currentOffset + PAGE_SIZE;
+            nextUrl = `${BASE}/api/models?author=${org}&limit=${PAGE_SIZE}&sort=downloads&direction=-1&skip=${newOffset}`;
+        } else {
+            nextUrl = null; // Last page
+        }
+
+        // Safety delay to prevent triggering HF rate limits
+        await new Promise(r => setTimeout(r, 100));
+    }
+
+    // Optionally filter out LoRA adapter repos (they're not standalone models)
+    if (excludeLora) {
+        return allModels.filter(m => !m.id.toLowerCase().includes('lora-'));
+    }
+    return allModels;
+}
+
+/**
+ * Concurrency-limited version of Promise.all / map
+ * Prevents browser ERR_INSUFFICIENT_RESOURCES when firing thousands of requests.
+ */
+async function mapLimit(array, limit, mapper, onProgress) {
+    const results = [];
+    const executing = new Set();
+    let completed = 0;
+
+    for (let i = 0; i < array.length; i++) {
+        const item = array[i];
+        const p = Promise.resolve().then(() => mapper(item, i, array));
+        results.push(p);
+        executing.add(p);
+
+        const clean = () => {
+            executing.delete(p);
+            completed++;
+            if (onProgress) onProgress(completed, array.length);
+        };
+        p.then(clean).catch(clean);
+
+        if (executing.size >= limit) {
+            await Promise.race(executing);
+        }
+    }
+    return Promise.allSettled(results);
+}
+
+async function syncInstalledModels(silent = false) {
+    try {
+        const res = await fetch('/api/llm/installed');
+        const data = await res.json();
+        if (data.installed) {
+            state.installedModels = data.installed;
+        }
+        // Always re-render if we are in the installed view
+        if (state.modelsTab === 'installed') renderFilteredModels();
+    } catch (e) {
+        if (!silent) console.warn("[Mirza] Could not fetch installed models", e);
+    }
+}
+
+async function loadModelsCatalog() {
+    // 1. Sync installed models from station immediately (don't wait for catalog)
+    syncInstalledModels(true);
+
+    try {
+        const orgList = [...state.activeOrgs];
+        const orgLabel = orgList.join(' + ');
+
+        // Check cache first
+        const cacheKey = `mirza_catalog_v2_${orgList.sort().join('_')}`;
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+            try {
+                const entry = JSON.parse(cached);
+                if (Date.now() - entry.timestamp < 3600000) { // 1 hour TTL
+                    console.log(`[Mirza] Loading catalog from local cache (${orgLabel})`);
+                    state.modelsCatalog = entry.data;
+                    populateFilters(entry.data);
+                    renderFilteredModels();
+                    return;
+                }
+            } catch (e) { }
+        }
+
+        dom.modelsGrid.innerHTML = `
+            <div class="mcp-empty">
+                <p>Fetching live catalog from <strong>${orgLabel}</strong>...</p>
+                <div class="spinner"></div>
+            </div>`;
+
+        const configRes = await fetch('/api/models');
+        const localConfig = await configRes.json();
+
+        // ── Fetch all selected orgs in parallel (each fully paginated) ────
+        const orgResults = await Promise.allSettled(
+            orgList.map(org => {
+                // Keep 'ggml-org' full (163 models) but limit 'unsloth' to top 200 popular repos
+                const max = (org === 'unsloth') ? 200 : 500;
+                return fetchAllHfModels(org, true, max).then(models =>
+                    models.map(m => ({ ...m, _source: org }))
+                );
+            })
+        );
+
+        // Merge + deduplicate by base name (strip -GGUF, quant suffix, lowercase).
+        // When both orgs have the same model, prefer ggml-org (canonical provenance).
+        const seen = new Map();
+        for (const result of orgResults) {
+            if (result.status !== 'fulfilled') continue;
+            for (const m of result.value) {
+                const baseName = (m.id.split('/')[1] || m.id)
+                    .replace(/-GGUF$/i, '').replace(/-Q\d[\w_]*-GGUF$/i, '').toLowerCase();
+                if (!seen.has(baseName)) {
+                    seen.set(baseName, m);
+                } else {
+                    // Prefer ggml-org over unsloth when both exist
+                    if (seen.get(baseName)._source !== 'ggml-org' && m._source === 'ggml-org') {
+                        seen.set(baseName, m);
+                    }
+                }
+            }
+        }
+        // ── Filter noise ───────────────────────────────────────────────────
+        const blacklist = ['test', 'moved', 'stories', 'dummy', 'tmp', 'training', 'junk', 'vocabs', 'wavtokenizer', 'ltx-'];
+        const filteredModels = hfModels.filter(m => {
+            const n = (m.id.split('/')[1] || '').toLowerCase();
+            return !blacklist.some(b => n.includes(b));
+        });
+
+        // Update source count badge
+        const countEl = document.getElementById('catalog-model-count');
+        if (countEl) countEl.textContent = `${filteredModels.length} models`;
+
+        dom.modelsGrid.innerHTML = `
+            <div class="mcp-empty">
+                <p>Loading metadata for <strong>${filteredModels.length} models</strong>...</p>
+                <div class="spinner"></div>
+            </div>`;
+
+        // Parallel fetch with concurrency limit (20 max) to prevent ERR_INSUFFICIENT_RESOURCES
+        const metaResults = await mapLimit(filteredModels, 20, async (m) => {
+            return Promise.all([
+                fetchGgufFileSizes(m.id),
+                fetchModelMeta(m.id),
+            ]);
+        }, (done, total) => {
+            const p = dom.modelsGrid.querySelector('.mcp-empty p');
+            if (p) {
+                p.innerHTML = `Loading metadata for <strong>${total} models</strong>...<br/>` +
+                    `<span style="font-size:0.8rem; color:var(--text-muted)">Processed ${done}/${total}</span>`;
+            }
+        });
+
+        // ── Rich capability flags from HF model card metadata ─────────────
+        const CAPS_DB = {
+            // True MoE models (multiple expert banks — GGUF stores ALL weights)
+            moe: [
+                'Mixtral', 'Mistral-8x',        // Mistral MoEs (8x7B, 8x22B)
+                'Qwen3-235',                     // Qwen3 235B-A22B
+                'Qwen3-Coder-30B-A3B',           // Qwen3 Coder MoE
+                'DeepSeek-V2', 'DeepSeek-V3',   // DeepSeek MoEs
+                'OLMoE', 'DBRX',                 // Other known MoEs
+                // Note: gpt-oss-120b is a DENSE model — NOT MoE
+                // Note: gemma-4-E4B uses sparse activation but is stored as full weights
+            ],
+            // Vision+Language (Multimodal)
+            vision: [
+                'SmolVLM', 'SmolVLM2', 'GLM-OCR', 'GLM-4.6V', 'moondream2', 'Qwen2.5-VL',
+                'Qwen-VL', 'tinygemma3', 'ultravox', 'DeepSeek-OCR', 'MiniCPM-V', 'Gemma3n'
+            ],
+            // Tool calling / Function calling support
+            tools: [
+                'Qwen2.5-Coder', 'Llama-3', 'Qwen3', 'Mistral', 'Hermes', 'Functionary'
+            ],
+            // Embedding / retrieval models (not chat)
+            embedding: [
+                'bge-m3', 'Nomic-Embed', 'embeddinggemma', 'Reranker'
+            ],
+            // Audio/Speech models
+            audio: ['ultravox'],
+        };
+
+        function detectCaps(repoId, nameLower, tags) {
+            const caps = {};
+            // MoE detection via name pattern
+            caps.moe = CAPS_DB.moe.some(k => nameLower.includes(k.toLowerCase())) ||
+                /moe|mixture.of.expert|\d+x\d+B/i.test(repoId) ||
+                (tags || []).includes('mixture-of-experts');
+
+            // Vision/Multimodal
+            caps.vision = CAPS_DB.vision.some(k => nameLower.includes(k.toLowerCase())) ||
+                /(vlm|smolvlm|vl-|vision|-vl-|multimodal|ocr|visual)/i.test(repoId) ||
+                (tags || []).some(t => ['vision', 'multimodal', 'image-text-to-text'].includes(t));
+
+            // Tool calling
+            caps.tools = CAPS_DB.tools.some(k => nameLower.includes(k.toLowerCase())) ||
+                (tags || []).some(t => ['function-calling', 'tool-use'].includes(t)) ||
+                /(-it-|instruct)/i.test(nameLower);
+
+            // Embedding
+            caps.embedding = CAPS_DB.embedding.some(k => nameLower.includes(k.toLowerCase())) ||
+                /(embed|rerank|retrieve)/i.test(nameLower) ||
+                (tags || []).includes('feature-extraction');
+
+            // Audio
+            caps.audio = CAPS_DB.audio.some(k => nameLower.includes(k.toLowerCase())) ||
+                (tags || []).some(t => ['audio', 'speech-to-text', 'automatic-speech-recognition'].includes(t));
+
+            // Context Length hint
+            caps.longCtx = /128k|64k|32k/i.test(repoId);
+
+            return caps;
+        }
+
+        const catalog = [];
+
+        for (let mi = 0; mi < filteredModels.length; mi++) {
+            const model = filteredModels[mi];
+            const hf_repo = model.id;
+            const name_parts = hf_repo.split('/')[1] || hf_repo;
+            const nLower = name_parts.toLowerCase();
+            const modelTags = model.tags || [];
+
+            // ── Real metadata from HF API ─────────────────────────────────────
+            let realSizeMap = {};
+            let ggufMeta = {};
+            if (metaResults[mi]?.status === 'fulfilled') {
+                const [sizeMap, meta] = metaResults[mi].value;
+                realSizeMap = sizeMap || {};
+                ggufMeta = meta?.gguf || {};
+            }
+            const bestGguf = pickBestGguf(realSizeMap);
+
+            // ── Parameter extraction ──────────────────────────────────────────
+            // Handles: 26B, 0.5B, 1.5B, E4B (Gemma sparse), A3B (MoE active),
+            //          8x7B (Mixtral), 30B-A3B (total-active MoE notation)
+            let parameters = "N/A";
+            let totalParamsNum = null; // Total stored params (for size calc)
+
+            // Check for MoE A-notation: 30B-A3B or 235B-A22B (total-activeB)
+            const moeSplit = name_parts.match(/(\d+(?:\.\d+)?[BT])-A(\d+(?:\.\d+)?[BT])/i);
+            if (moeSplit) {
+                // Store total for size, display as "235B" (total)
+                totalParamsNum = parseFloat(moeSplit[1]);
+                parameters = moeSplit[1].toUpperCase(); // Show total params (= GGUF size)
+            } else {
+                const paramMatch = name_parts.match(/(\d+(?:\.\d+)?[BT]|[EA]\d+(?:\.\d+)?[BT]|\d+x\d+(?:\.\d+)?[BT])/i);
+                if (paramMatch) {
+                    let p = paramMatch[1].toUpperCase();
+                    // E4B / A4B = effective/active params (sparse models) — keep as-is for display
+                    // The GGUF file for these maps to roughly the effective param count
+                    if (/^[EA]/i.test(p)) p = p.substring(1);
+                    // NxM notation (Mixtral 8x7B = 56B total) — compute real total
+                    const mixMatch = p.match(/^(\d+)x(\d+(?:\.\d+)?)([BT])$/i);
+                    if (mixMatch) {
+                        totalParamsNum = parseInt(mixMatch[1]) * parseFloat(mixMatch[2]);
+                        parameters = `${totalParamsNum}${mixMatch[3].toUpperCase()}`;
+                    } else {
+                        parameters = p;
+                    }
+                } else {
+                    const tagMatch = modelTags.find(t => /^\d+b$/i.test(t));
+                    if (tagMatch) parameters = tagMatch.toUpperCase();
+                }
+            }
+
+            // ── Quantization detection ────────────────────────────────────────
+            let quantization = "Q4_K_M";
+            const quantMatch = name_parts.match(/(Q\d(?:_K)?(?:_[SM])?|FP\d+|IQ\d_[A-Z]+)/i);
+            if (quantMatch) quantization = quantMatch[1].toUpperCase();
+
+            // ── Family ────────────────────────────────────────────────────────
+            let family = name_parts.split(/[-_]/)[0];
+            if (/^llama/i.test(name_parts)) family = "Llama";
+            else if (/^gemma/i.test(name_parts)) family = "Gemma";
+            else if (/^Qwen/i.test(name_parts)) family = "Qwen";
+            else if (/^smol/i.test(name_parts)) family = "SmolLM";
+            else if (/^mistral/i.test(name_parts)) family = "Mistral";
+            else if (/^phi/i.test(name_parts)) family = "Phi";
+            else if (/^deepseek/i.test(name_parts)) family = "DeepSeek";
+            else if (/^glm/i.test(name_parts)) family = "GLM";
+            else if (/^moondream/i.test(name_parts)) family = "Moondream";
+            else if (/^ultravox/i.test(name_parts)) family = "Ultravox";
+            else if (/^bge/i.test(name_parts) || /embed/i.test(name_parts)) family = "Embedding";
+
+            // ── Memory estimation — Real data from HF API, formula as fallback ──
+            let paramsNum = parseFloat(parameters.replace(/[BT]/i, ''));
+            if (parameters.endsWith('T')) paramsNum *= 1000;
+            if (isNaN(paramsNum)) paramsNum = 7;
+
+            const caps = detectCaps(hf_repo, nLower, modelTags, ggufMeta);
+
+            // 1. Try real file size from tree API (most accurate)
+            let size_gb;
+            if (bestGguf && bestGguf.size_gb > 0) {
+                size_gb = bestGguf.size_gb;
+                // Detect quantization from actual selected filename
+                const qMatch = bestGguf.name.match(/(Q\d(?:_K)?(?:_[SM])?|FP\d+|BF16|F16|IQ\d_[A-Z]+)/i);
+                if (qMatch) quantization = qMatch[1].toUpperCase();
+            } else if (ggufMeta.total && ggufMeta.total > 0) {
+                // 2. Fallback: gguf.total from model API (sum of all GGUF files)
+                //    Divide by number of quant variants to get approximate single file size
+                const ggufCount = Object.keys(realSizeMap).length || 1;
+                size_gb = Math.round(ggufMeta.total / ggufCount / 1e9 * 10) / 10;
+            } else {
+                // 3. Last resort: heuristic formula
+                const sizeParams = totalParamsNum !== null ? totalParamsNum : paramsNum;
+                let bits = 4;
+                if (/^Q8|^FP8|^BF16|^F16/i.test(quantization)) bits = 8;
+                else if (/^Q6/i.test(quantization)) bits = 6;
+                else if (/^Q5/i.test(quantization)) bits = 5;
+                else if (/^Q3/i.test(quantization)) bits = 3;
+                else if (/^Q2|^IQ2/i.test(quantization)) bits = 2;
+                size_gb = Math.round((sizeParams * (bits / 8) + 0.5) * 10) / 10;
+            }
+
+            // Context window: real value from GGUF metadata takes priority
+            const realCtx = ggufMeta.context_length || 0;
+
+            // KV cache estimate — use active params for MoE (smaller attention footprint)
+            const activeParams = caps.moe ? Math.max(paramsNum * 0.15, 3) : paramsNum;
+            let kv_cache_gb = activeParams > 30 ? 6
+                : activeParams > 14 ? 4
+                    : activeParams > 6 ? 2
+                        : 1;
+            let min_ram_gb = Math.ceil(size_gb + kv_cache_gb + 4);
+
+            // ── Categories ────────────────────────────────────────────────────
+            let catSet = new Set();
+            if (caps.vision) catSet.add('vision');
+            if (caps.audio) catSet.add('audio');
+            if (caps.embedding) catSet.add('embedding');
+            if (caps.moe) catSet.add('moe');
+            if (caps.tools) catSet.add('tools');
+            if (/(coder|code)/i.test(nLower)) catSet.add('code');
+            if (/(-it-|instruct|chat)/i.test(nLower)) catSet.add('chat');
+            if (/(distill|reason|r1|r3)/i.test(nLower)) catSet.add('reasoning');
+            if (paramsNum <= 3) catSet.add('light');
+            if (catSet.size === 0) catSet.add('general');
+            const cats = [...catSet];
+
+            // ── Top recommendation logic ──────────────────────────────────────
+            const macRamEst = state.dashboardData?.hardware?.ram_gb || 24;
+            const isLatest = /gemma-4|llama-3|qwen-2\.5|qwen-3|smolvlm2/i.test(nLower);
+            const isPopular = model.downloads > 50000;
+            const fitsInRam = min_ram_gb <= macRamEst;
+            const recommended = (isLatest || isPopular) && fitsInRam;
+
+            catalog.push({
+                hf_repo, name: name_parts, family,
+                parameters, quantization,
+                size_gb, kv_cache_gb, min_ram_gb,
+                categories: cats, caps,
+                description: `${(model.downloads || 0).toLocaleString()} downloads`,
+                downloads: model.downloads || 0,
+                recommended,
+                tags: modelTags,
+                // Real metadata from HF API
+                context_length: realCtx,
+                architecture: ggufMeta.architecture || null,
+                best_file: bestGguf?.name || null,
+                source: model._source || 'ggml-org',  // origin org
+            });
+        }
+
+        localConfig.catalog = catalog;
+        state.modelsCatalog = localConfig;
+
+        // Save back to cache
+        localStorage.setItem(cacheKey, JSON.stringify({
+            timestamp: Date.now(),
+            data: localConfig
+        }));
+
+        populateFilters(localConfig);
+        renderFilteredModels();
+    } catch (e) {
+        dom.modelsGrid.innerHTML = `<div class="mcp-empty">Error: ${escapeHtml(e.message)}</div>`;
+    }
+}
+
+// Built-in categories covering all capabilities we detect
+const ALL_CATEGORIES = {
+    vision: { icon: '👁️', label: 'Vision / Multimodal' },
+    audio: { icon: '🎙️', label: 'Audio / Speech' },
+    embedding: { icon: '🔗', label: 'Embedding / RAG' },
+    moe: { icon: '🧩', label: 'MoE (Mixture of Experts)' },
+    tools: { icon: '🛠️', label: 'Function Calling' },
+    code: { icon: '💻', label: 'Code' },
+    chat: { icon: '💬', label: 'Chat / Instruct' },
+    reasoning: { icon: '🧠', label: 'Reasoning' },
+    light: { icon: '⚡', label: 'Lightweight (<3B)' },
+    general: { icon: '◈', label: 'General' },
+};
+
 function populateFilters(data) {
-    if (!data.categories) return;
-    dom.filterCategory.innerHTML = '<option value="">Toutes catégories</option>';
-    Object.entries(data.categories).forEach(([key, cat]) => {
-        dom.filterCategory.innerHTML += `<option value="${key}">${cat.icon} ${cat.label}</option>`;
-    });
+    if (!data.categories) data.categories = {};
+    Object.assign(data.categories, ALL_CATEGORIES);
+
+    if (dom.filterCategory) {
+        dom.filterCategory.innerHTML = '<option value="">All categories</option>';
+        Object.entries(ALL_CATEGORIES).forEach(([key, cat]) => {
+            dom.filterCategory.innerHTML += `<option value="${key}">${cat.icon} ${cat.label}</option>`;
+        });
+    }
     if (dom.filterFamily && data.catalog) {
-        const uniqueFams = [...new Set(data.catalog.map(m => m.family || 'Autre'))].sort();
-        dom.filterFamily.innerHTML = '<option value="">Toutes familles</option>';
+        const uniqueFams = [...new Set(data.catalog.map(m => m.family || 'Other'))].sort();
+        dom.filterFamily.innerHTML = '<option value="">All families</option>';
         uniqueFams.forEach(fam => {
             dom.filterFamily.innerHTML += `<option value="${fam}">${fam}</option>`;
         });
     }
-    if (data.ram_tiers) {
-        dom.filterRam.innerHTML = '<option value="">Toute RAM</option>';
-        Object.entries(data.ram_tiers).forEach(([key, tier]) => {
-            dom.filterRam.innerHTML += `<option value="${key}">${tier.label} (≤${tier.max_model_gb} Go modèle)</option>`;
-        });
-    }
+}
+
+/**
+ * Checks if a repository ID (e.g. org/model-gguf) matches any of the
+ * filenames found in state.installedModels (e.g. model-q4_k_m.gguf).
+ */
+function isModelInstalled(repoId, bestFile) {
+    const installed = state.installedModels || [];
+    const idLower = repoId.toLowerCase();
+    const repoName = idLower.split('/').pop().replace(/-gguf$/i, '');
+
+    return installed.some(filename => {
+        const f = filename.toLowerCase();
+        // Exact match via known best_file
+        if (bestFile && f === bestFile.toLowerCase()) return true;
+        // Fuzzy match via repo name (e.g. repo name is prefix of filename)
+        if (f.includes(repoName)) return true;
+        return false;
+    });
 }
 
 function renderFilteredModels() {
@@ -616,18 +1172,44 @@ function renderFilteredModels() {
     const categories = state.modelsCatalog.categories || {};
     const ramTiers = state.modelsCatalog.ram_tiers || {};
 
-    let models = state.modelsCatalog.catalog;
-
-    const _installedNorm = state.installedModels.map(i => i.toLowerCase().trim());
+    let models = [...state.modelsCatalog.catalog];
 
     if (state.modelsTab === 'installed') {
-        models = models.filter(m => _installedNorm.includes((m.hf_repo || '').toLowerCase().trim()));
+        // Find catalog models that match disk files
+        const catalogMatches = models.filter(m => isModelInstalled(m.hf_repo, m.best_file));
+
+        // Find disk files that DON'T have catalog metadata (generic view)
+        const matchedFilenames = new Set();
+        catalogMatches.forEach(m => {
+            const f = state.installedModels.find(fname =>
+                fname.toLowerCase() === (m.best_file || '').toLowerCase() ||
+                fname.toLowerCase().includes(m.hf_repo.split('/').pop().toLowerCase().replace(/-gguf$/i, ''))
+            );
+            if (f) matchedFilenames.add(f);
+        });
+
+        const orphans = state.installedModels
+            .filter(f => !matchedFilenames.has(f))
+            .map(f => ({
+                name: f,
+                hf_repo: `local/${f}`,
+                family: 'Installed File',
+                parameters: 'N/A',
+                quantization: f.match(/q\d[\w_]*/i)?.[0]?.toUpperCase() || 'Unknown',
+                size_gb: '?',
+                min_ram_gb: 0,
+                categories: ['general'],
+                isOrphan: true,
+                best_file: f
+            }));
+
+        models = [...catalogMatches, ...orphans];
     }
 
     if (dom.filterSearch && dom.filterSearch.value.trim() !== '') {
         const query = dom.filterSearch.value.toLowerCase();
-        models = models.filter(m => 
-            m.name.toLowerCase().includes(query) || 
+        models = models.filter(m =>
+            m.name.toLowerCase().includes(query) ||
             (m.hf_repo && m.hf_repo.toLowerCase().includes(query))
         );
     }
@@ -638,16 +1220,22 @@ function renderFilteredModels() {
     if (/Max/i.test(chip)) bandwidth = 400;
     else if (/Pro/i.test(chip)) bandwidth = 200;
     else if (/Ultra/i.test(chip)) bandwidth = 800;
+    else if (/M4/i.test(chip)) bandwidth = 120; // M4 base is faster
 
     if (state.modelsTab === 'top10') {
+        // Only keep compatible and legitimate high-quality models
         models = models.filter(m => m.min_ram_gb <= macRam);
-        models = models.filter(m => {
-            let toks = Math.round(bandwidth / (m.size_gb || 1));
-            return toks >= 15 && toks <= 35;
-        });
-        models = models.sort((a,b) => {
-            let scoreA = (a.downloads || 0) + ((a.categories?.length || 0) * 50000);
-            let scoreB = (b.downloads || 0) + ((b.categories?.length || 0) * 50000);
+
+        models = models.sort((a, b) => {
+            // Priority Score
+            let scoreA = (a.downloads || 0) / 1000;
+            let scoreB = (b.downloads || 0) / 1000;
+
+            // Boost for latest/optimized families (Mirza Selection)
+            const boost = 50000;
+            if (/gemma-4|llama-3|qwen-3|qwen-2\.5|smollm3/i.test(a.hf_repo)) scoreA += boost;
+            if (/gemma-4|llama-3|qwen-3|qwen-2\.5|smollm3/i.test(b.hf_repo)) scoreB += boost;
+
             return scoreB - scoreA;
         }).slice(0, 10);
     }
@@ -678,26 +1266,46 @@ function renderFilteredModels() {
         });
     }
 
+    // ── Context-aware KV cache recalculation ──────────────────────────
+    // Formula: kv_cache ≈ size_gb * KV_RATIO * (ctx / BASE_CTX)
+    // KV_RATIO ≈ 0.05 means "5% of model size per 4k context tokens"
+    // For MoE models, KV is proportional to active params (smaller)
+    const KV_RATIO = 0.05;
+    const BASE_CTX = 4096;
+    const ctxFilter = document.getElementById('filter-context');
+    const selectedCtx = parseInt(ctxFilter?.value || '8192', 10);
+
+    // Recompute min_ram for each model with the selected context
+    models = models.map(m => {
+        const moeFactor = m.caps?.moe ? Math.min(1, (m.paramsNum || 7) * 0.15 / Math.max(m.paramsNum || 7, 1)) : 1;
+        const kvAtCtx = Math.ceil((m.size_gb || 0) * KV_RATIO * moeFactor * (selectedCtx / BASE_CTX) * 10) / 10;
+        const newMinRam = Math.ceil((m.size_gb || 0) + Math.max(kvAtCtx, 0.5) + 4);
+        return { ...m, _kv_ctx: kvAtCtx, min_ram_gb: newMinRam };
+    });
+
     if (models.length === 0) {
-        dom.modelsGrid.innerHTML = '<div class="mcp-empty">Aucun modèle correspondant.</div>';
+        const msg = state.modelsTab === 'installed'
+            ? 'No models installed on remote station. (Checked ~/mirza-models/)'
+            : 'No matching models found in Cloud Catalog.';
+        dom.modelsGrid.innerHTML = `<div class="mcp-empty">${msg}</div>`;
         return;
     }
 
     dom.modelsGrid.innerHTML = '';
-    
+
     models.forEach(m => {
-        let isInstalled = _installedNorm.includes((m.hf_repo || '').toLowerCase().trim());
+        let isInstalled = m.isOrphan || isModelInstalled(m.hf_repo, m.best_file);
         let isRecommended = m.recommended || false;
         let isUnsupported = false;
         let warningText = '';
-        
+
         let estimatedToks = Math.round(bandwidth / (m.size_gb || 1));
-        
+
         if (macRam) {
             if (macRam < m.min_ram_gb) {
                 isUnsupported = true;
                 isRecommended = false;
-                warningText = `<span class="model-tag" style="background:var(--color-danger);color:white">RAM Incompatible (${m.min_ram_gb}Go req. OS Inclus)</span>`;
+                warningText = `<span class="model-tag" style="background:var(--color-error);color:white">⚠ Not enough RAM (${m.min_ram_gb} GB needed at ${selectedCtx.toLocaleString()} ctx)</span>`;
             } else {
                 if (macRam - m.min_ram_gb <= 12 && macRam - m.min_ram_gb >= 0) {
                     isRecommended = true;
@@ -707,47 +1315,71 @@ function renderFilteredModels() {
 
         const card = document.createElement('div');
         card.className = `model-card${isRecommended ? ' recommended' : ''}${isUnsupported ? ' unsupported' : ''}`;
-        if(isUnsupported) card.style.opacity = "0.4";
+        if (isUnsupported) card.style.opacity = "0.4";
 
-        const catTags = (m.categories || []).map(c => {
-            const cat = categories[c];
-            return `<span class="model-tag">${cat ? cat.icon : ''} ${cat ? cat.label : c}</span>`;
-        }).join('');
+        const caps = m.caps || {};
+        const cats = m.categories || [];
+
+        // Capability badges
+        const capBadges = [];
+        if (caps.moe) capBadges.push('<span class="cap-badge moe">🧩 MoE</span>');
+        if (caps.vision) capBadges.push('<span class="cap-badge vision">👁️ Vision</span>');
+        if (caps.audio) capBadges.push('<span class="cap-badge audio">🎙️ Audio</span>');
+        if (caps.embedding) capBadges.push('<span class="cap-badge embed">🔗 Embedding</span>');
+        if (caps.tools) capBadges.push('<span class="cap-badge tools">🛠️ Tools</span>');
+        if (caps.longCtx) capBadges.push('<span class="cap-badge ctx">📐 Long Context</span>');
+        if (cats.includes('code')) capBadges.push('<span class="cap-badge code">💻 Code</span>');
+        if (cats.includes('reasoning')) capBadges.push('<span class="cap-badge reason">🧠 Reasoning</span>');
+        if (cats.includes('light')) capBadges.push('<span class="cap-badge light">⚡ Lightweight</span>');
+
+        const capBadgesHtml = capBadges.length > 0
+            ? `<div class="cap-badges-row">${capBadges.join('')}</div>`
+            : '';
 
         card.innerHTML = `
             <div class="model-card-header">
-                <div class="model-card-name" style="word-break: break-all; font-size: 0.9em;">${escapeHtml(m.name)}</div>
-                ${isRecommended ? '<span class="model-tag star">⭐ Optimisé Mac</span>' : ''}
+                <div class="model-card-name">${escapeHtml(m.name)}</div>
+                <div style="display:flex; gap:5px; align-items:center; flex-shrink:0;">
+                    ${m.source === 'unsloth'
+                ? '<span style="font-size:0.68rem;padding:2px 7px;border-radius:10px;background:rgba(251,146,60,0.12);color:#fb923c;border:1px solid rgba(251,146,60,0.3);font-weight:600;">🦥 unsloth</span>'
+                : (state.activeOrgs.size > 1 ? '<span style="font-size:0.68rem;padding:2px 7px;border-radius:10px;background:rgba(56,189,248,0.1);color:#38bdf8;border:1px solid rgba(56,189,248,0.25);font-weight:600;">🧊 ggml</span>' : '')
+            }
+                    ${isRecommended ? '<span class="model-tag star">⭐ Top Mirza</span>' : ''}
+                </div>
             </div>
             <div class="model-card-family">${escapeHtml(m.family)} · ${m.parameters} · ${m.quantization}</div>
-            <div class="model-card-desc">${escapeHtml(m.description)}</div>
-            <div class="model-card-meta" style="flex-wrap: wrap;">
-                <span class="model-tag size">Poids: ${m.size_gb} Go</span>
-                <span class="model-tag size" style="color:var(--color-success)">KV Cache: ${m.kv_cache_gb} Go</span>
-                <span class="model-tag">RAM OS: 4.0 Go</span>
+            
+            ${capBadgesHtml}
+
+            <div class="model-card-meta" style="flex-wrap: wrap; margin-top: 8px; gap: 6px;">
+                <span class="model-tag size" title="${m.best_file ? 'Real file: ' + m.best_file : 'Heuristic estimate'}">
+                    💾 ${m.size_gb} GB${m.best_file ? '' : '*'}
+                </span>
+                <span class="model-tag" style="color:var(--color-success)" title="RAM at ${selectedCtx.toLocaleString()} ctx tokens">🧠 RAM: ${m.min_ram_gb} GB</span>
+                <span class="model-tag" style="color:#a78bfa" title="KV cache for ${selectedCtx.toLocaleString()} tokens">🗂 KV: ${(m._kv_ctx || 0).toFixed(1)} GB</span>
+                <span class="model-tag size">⚡ ~${estimatedToks} t/s</span>
+                ${m.context_length ? `<span class="model-tag" style="color:var(--color-accent-secondary)">📐 ${m.context_length >= 100000 ? Math.round(m.context_length / 1000) + 'k' : (m.context_length / 1000).toFixed(0) + 'k'} ctx</span>` : ''}
+                <span class="model-tag">↓ ${(m.downloads || 0).toLocaleString()}</span>
             </div>
-            <div class="model-card-meta" style="flex-wrap: wrap; margin-top: 4px;">    
-                <span class="model-tag star"> ~${estimatedToks} tok/s</span>
-                <span class="model-tag">⚙️ Flash Attention</span>
-                <span class="model-tag">⚙️ Paged Attention</span>
-            </div>
-            <div class="model-card-meta" style="margin-top:4px;">
-                ${catTags}
-                ${warningText}
-            </div>
-            <div class="model-card-footer" style="align-items: center;">
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <span class="model-card-stats">↓ ${(m.downloads || 0).toLocaleString()}</span>
-                    <a href="https://huggingface.co/${escapeHtml(m.hf_repo)}" target="_blank" class="model-card-stats" style="text-decoration: none; display: flex; align-items: center; gap: 4px;" title="Documentation HuggingFace">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg> Doc
-                    </a>
-                </div>
-                <div style="display:flex;gap:6px;">
-                    ${!isInstalled 
-                        ? `<button class="model-btn model-btn-deploy" ${isUnsupported ? 'disabled style="cursor:not-allowed;"' : ''} onclick="deployModel('${escapeHtml(m.hf_repo)}')">Télécharger</button>`
-                        : `<button class="model-btn model-btn-deploy" disabled style="cursor:not-allowed; opacity: 0.5;">Installé ✓</button>`
-                    }
-                    <button class="model-btn model-btn-serve" ${isUnsupported ? 'disabled style="cursor:not-allowed;"' : ''} onclick="serveModel('${escapeHtml(m.hf_repo)}')">Servir</button>
+
+            ${warningText ? `<div style="margin-top:6px;">${warningText}</div>` : ''}
+
+            <div class="model-card-footer" style="padding-top: 12px; border-top: 1px solid rgba(255,255,255,0.05); margin-top: auto;">
+                <a href="https://huggingface.co/${escapeHtml(m.hf_repo)}" target="_blank" class="model-card-stats"
+                   style="text-decoration:none; display:flex; align-items:center; gap:4px;" title="View on HuggingFace">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 22 3 22 10"/><line x1="14" y1="10" x2="22" y2="2"/></svg> HF
+                </a>
+                <div style="display:flex; gap:6px;">
+                    ${caps.embedding
+                ? `<span class="model-tag" style="color:var(--color-warning); font-size:0.75rem;">RAG only</span>`
+                : (!isInstalled
+                    ? `<button class="model-btn model-btn-deploy" ${isUnsupported ? 'disabled' : ''} onclick="deployModel('${escapeHtml(m.hf_repo)}', '${escapeHtml(m.best_file || '')}')">↓ Download</button>`
+                    : `<button class="model-btn model-btn-deploy" disabled style="opacity:0.5;">✓ Installed</button>`)
+            }
+                    ${!caps.embedding
+                ? `<button class="model-btn model-btn-serve" ${isUnsupported ? 'disabled' : ''} onclick="serveModel('${escapeHtml(m.hf_repo)}')">▶ Serve</button>`
+                : ''
+            }
                 </div>
             </div>
         `;
@@ -755,34 +1387,139 @@ function renderFilteredModels() {
     });
 }
 
-async function deployModel(hfRepo) {
-    toast(`Déploiement de ${hfRepo.split('/').pop()}...`, 'info');
+async function deployModel(hfRepo, filename = '') {
+    if (state.isDownloading) {
+        toast('A download is already in progress.', 'warning');
+        return;
+    }
+
+    toast(`Starting download for ${hfRepo.split('/').pop()}...`, 'info');
+
+    // Global progress (fallback)
+    state.isDownloading = true;
+    if (dom['global_download_progress']) dom['global_download_progress'].style.display = 'block';
+    if (dom['download_status_text']) dom['download_status_text'].innerText = `Deploying ${hfRepo}...`;
+    if (dom['download_percent']) dom['download_percent'].innerText = '0%';
+
+    // Dashboard Widget (primary)
+    if (dom.dashSectionDownload) dom.dashSectionDownload.style.display = 'block';
+    if (dom.dashDownloadLabel) dom.dashDownloadLabel.innerText = hfRepo;
+    if (dom.dashDownloadLogs) dom.dashDownloadLogs.innerText = 'Connecting to station...';
+
+    // Start polling *before* the request if possible, or right after
+    startProgressPolling();
+
     try {
-        const res = await fetch('/api/mlx/deploy', {
+        const res = await fetch('/api/llm/deploy', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ hf_repo: hfRepo })
+            body: JSON.stringify({
+                hf_repo: hfRepo,
+                filename: filename
+            })
         });
         const data = await res.json();
-        toast(data.ok ? 'Modèle téléchargé !' : (data.error || 'Erreur'), data.ok ? 'success' : 'error');
+
+        if (!data.ok) {
+            stopProgressPolling();
+            state.isDownloading = false;
+            toast(data.error || 'Deployment failed to start', 'error');
+            if (dom.dashSectionDownload) dom.dashSectionDownload.style.display = 'none';
+            if (dom['global_download_progress']) dom['global_download_progress'].style.display = 'none';
+        } else {
+            // Deploy started in background, polling continues until 100%
+            toast('Deployment started on Mirza.', 'success');
+        }
     } catch (e) {
-        toast(`Erreur: ${e.message}`, 'error');
+        stopProgressPolling();
+        state.isDownloading = false;
+        toast(`Network Error: ${e.message}`, 'error');
+        if (dom.dashSectionDownload) dom.dashSectionDownload.style.display = 'none';
+    }
+}
+
+function startProgressPolling() {
+    if (state.downloadInterval) clearInterval(state.downloadInterval);
+    state.downloadInterval = setInterval(async () => {
+        try {
+            // 1. Fetch Progress Percent
+            const resP = await fetch('/api/llm/download-status');
+            const dataP = await resP.json();
+            const p = parseInt(dataP.progress);
+
+            if (p >= 0) {
+                // Update Global Fallback
+                if (dom['download_percent']) dom['download_percent'].innerText = `${p}%`;
+                if (dom['download_progress_bar']) dom['download_progress_bar'].style.width = `${p}%`;
+
+                // Update Dashboard Widget
+                if (dom.dashDownloadPercent) dom.dashDownloadPercent.innerText = `${p}%`;
+                if (dom.dashDownloadProgressBar) dom.dashDownloadProgressBar.style.width = `${p}%`;
+
+                if (p === 100) {
+                    toast('Download completed successfully!', 'success');
+                    stopProgressPolling();
+                    state.isDownloading = false;
+                    loadModelsCatalog();
+                    setTimeout(() => {
+                        if (dom.dashSectionDownload) dom.dashSectionDownload.style.display = 'none';
+                        if (dom['global_download_progress']) dom['global_download_progress'].style.display = 'none';
+                    }, 5000);
+                }
+            }
+
+            // 2. Fetch Deploy Logs
+            const resL = await fetch('/api/llm/deploy-logs');
+            const dataL = await resL.json();
+            if (dataL.logs && dom.dashDownloadLogs) {
+                const logs = dataL.logs.trim();
+                if (logs !== dom.dashDownloadLogs.innerText) {
+                    dom.dashDownloadLogs.innerText = logs;
+                    dom.dashDownloadLogs.scrollTop = dom.dashDownloadLogs.scrollHeight;
+                }
+            }
+        } catch (e) {
+            console.warn("Polling error", e);
+        }
+    }, 2000);
+}
+
+function stopProgressPolling() {
+    if (state.downloadInterval) {
+        clearInterval(state.downloadInterval);
+        state.downloadInterval = null;
     }
 }
 
 async function serveModel(hfRepo) {
-    toast(`Démarrage de ${hfRepo.split('/').pop()}...`, 'info');
+    // Show Options Modal instead of starting immediately
+    state.selectedInferenceModel = hfRepo;
+    dom['overlay_inference'].classList.add('visible');
+}
+
+async function startServeWithConfig() {
+    const hfRepo = state.selectedInferenceModel;
+    dom['overlay_inference'].classList.remove('visible');
+
+    toast(`Starting ${hfRepo.split('/').pop()} with your settings...`, 'info');
     try {
-        const res = await fetch('/api/mlx/serve', {
+        const res = await fetch('/api/llm/serve', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: hfRepo })
+            body: JSON.stringify({
+                model: hfRepo,
+                perf: state.inferenceConfig
+            })
         });
         const data = await res.json();
-        toast(data.message || 'Serveur démarré', data.ok ? 'success' : 'error');
-        setTimeout(loadDashboard, 5000);
+        toast(data.ok ? 'Server starting...' : (data.error || 'Error'), data.ok ? 'success' : 'error');
+
+        if (data.ok) {
+            // Update UI to show starting status
+            setTimeout(loadDashboard, 2000);
+        }
     } catch (e) {
-        toast(`Erreur: ${e.message}`, 'error');
+        toast(`Error: ${e.message}`, 'error');
     }
 }
 
@@ -806,19 +1543,19 @@ async function loadConfig() {
         if (data.config) {
             renderConfig(data.config);
         } else {
-            dom.configContainer.innerHTML = `<div class="mcp-empty">${data.error || 'Configuration introuvable'}</div>`;
+            dom.configContainer.innerHTML = `<div class="mcp-empty">${data.error || 'Configuration not found'}</div>`;
         }
     } catch (e) {
-        dom.configContainer.innerHTML = `<div class="mcp-empty">Erreur: ${escapeHtml(e.message)}</div>`;
+        dom.configContainer.innerHTML = `<div class="mcp-empty">Error: ${escapeHtml(e.message)}</div>`;
     }
 }
 
 function renderConfig(config) {
     const sectionMeta = {
-        server: { icon: '&#9670;', label: 'Serveur' },
-        system: { icon: '&#9881;', label: 'Systeme' },
+        server: { icon: '&#9670;', label: 'Server' },
+        system: { icon: '&#9881;', label: 'System' },
         hardware: { icon: '&#9879;', label: 'Hardware' },
-        ai: { icon: '&#9733;', label: 'Intelligence Artificielle' },
+        ai: { icon: '&#9733;', label: 'Artificial Intelligence' },
         monitoring: { icon: '&#9636;', label: 'Monitoring' },
     };
 
@@ -832,7 +1569,7 @@ function renderConfig(config) {
         }
     }
     if (live && config.ai) {
-        config.ai.api_status = live.mlx_api ? 'running' : 'stopped';
+        config.ai.api_status = live.llm_api ? 'running' : 'stopped';
         if (live.active_model) config.ai.active_model = live.active_model;
     }
 
@@ -1188,7 +1925,7 @@ async function sendMessage() {
                 const t = line.trim();
                 if (!t || !t.startsWith('data: ')) continue;
                 const d = t.slice(6); if (d === '[DONE]') continue;
-                try { const p = JSON.parse(d); const delta = p.choices?.[0]?.delta?.content; if (delta) { full += delta; tokens++; updateStreamingMessage(streamEl, full); } } catch {}
+                try { const p = JSON.parse(d); const delta = p.choices?.[0]?.delta?.content; if (delta) { full += delta; tokens++; updateStreamingMessage(streamEl, full); } } catch { }
             }
         }
 
@@ -1217,10 +1954,12 @@ async function sendMessage() {
 // =================================================================
 function renderMarkdown(text) {
     if (!text) return '';
-    marked.setOptions({ breaks: true, gfm: true, highlight: (code, lang) => {
-        if (lang && hljs.getLanguage(lang)) try { return hljs.highlight(code, { language: lang }).value; } catch {}
-        return hljs.highlightAuto(code).value;
-    }});
+    marked.setOptions({
+        breaks: true, gfm: true, highlight: (code, lang) => {
+            if (lang && hljs.getLanguage(lang)) try { return hljs.highlight(code, { language: lang }).value; } catch { }
+            return hljs.highlightAuto(code).value;
+        }
+    });
     return marked.parse(text);
 }
 
@@ -1253,4 +1992,49 @@ window.copyMessageContent = copyMessageContent;
 // =================================================================
 document.addEventListener('DOMContentLoaded', () => {
     init();
+    bindModalEvents();
+    bindInferenceEvents();
 });
+
+function bindModalEvents() {
+    if (dom['btn_close_inference']) {
+        dom['btn_close_inference'].onclick = () => {
+            dom['overlay_inference'].classList.remove('visible');
+        };
+    }
+    // Close on overlay click
+    if (dom['overlay_inference']) {
+        dom['overlay_inference'].onclick = (e) => {
+            if (e.target === dom['overlay_inference']) {
+                dom['overlay_inference'].classList.remove('visible');
+            }
+        };
+    }
+}
+
+function bindInferenceEvents() {
+    // Context chips
+    const chips = document.querySelectorAll('.ctx-chip');
+    chips.forEach(chip => {
+        chip.onclick = () => {
+            chips.forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            state.inferenceConfig.ctx = parseInt(chip.dataset.val);
+        };
+    });
+
+    // Toggles
+    if (dom['option_kv_q']) {
+        dom['option_kv_q'].onchange = (e) => state.inferenceConfig.kv_q = e.target.value;
+    }
+    if (dom['option_flash_attn']) {
+        dom['option_flash_attn'].onchange = (e) => state.inferenceConfig.flash_attn = e.target.checked;
+    }
+    if (dom['option_paged_kv']) {
+        dom['option_paged_kv'].onchange = (e) => state.inferenceConfig.paged_kv = e.target.checked;
+    }
+
+    if (dom['btn_start_serve']) {
+        dom['btn_start_serve'].onclick = startServeWithConfig;
+    }
+}

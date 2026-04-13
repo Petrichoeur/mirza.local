@@ -2133,3 +2133,44 @@ body {
 .docs-table tr:hover td {
     background: var(--color-bg-hover);
 }
+
+/* Inference modal needs higher z-index than other overlays */
+#overlay-inference {
+    z-index: 2000;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CAPABILITY BADGES — Model capability indicators
+   ═══════════════════════════════════════════════════════════════ */
+.cap-badges-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin: 6px 0 2px;
+}
+
+.cap-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    border: 1px solid;
+    white-space: nowrap;
+}
+
+.cap-badge.vision    { background: rgba(139, 92, 246, 0.15); color: #a78bfa; border-color: rgba(139,92,246,0.3); }
+.cap-badge.audio     { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border-color: rgba(245,158,11,0.3); }
+.cap-badge.embed     { background: rgba(20, 184, 166, 0.15); color: #2dd4bf; border-color: rgba(20,184,166,0.3); }
+.cap-badge.moe       { background: rgba(236, 72, 153, 0.15); color: #f472b6; border-color: rgba(236,72,153,0.3); }
+.cap-badge.tools     { background: rgba(59, 130, 246, 0.15); color: #60a5fa; border-color: rgba(59,130,246,0.3); }
+.cap-badge.ctx       { background: rgba(16, 185, 129, 0.12); color: #34d399; border-color: rgba(16,185,129,0.3); }
+.cap-badge.code      { background: rgba(99, 102, 241, 0.15); color: #818cf8; border-color: rgba(99,102,241,0.3); }
+.cap-badge.reason    { background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168,85,247,0.3); }
+.cap-badge.light     { background: rgba(251, 191, 36, 0.12); color: #fbbf24; border-color: rgba(251,191,36,0.2); }
+
+/* Inference overlay higher z-index */
+#overlay-inference { z-index: 2000; }

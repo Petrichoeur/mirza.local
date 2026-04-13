@@ -1,11 +1,11 @@
 #!/bin/bash
 # ==============================================================================
-# Mirza AI -- Installation du poste client
-# Installe les dependances necessaires sur CE poste Linux/Ubuntu pour piloter
-# le Mac Mini distant, et configure la commande globale "mirza".
+# Mirza AI -- Client workstation setup
+# Installs required dependencies on this Linux machine to control the remote
+# Apple Silicon Mac, and registers the global "mirza" command.
 # ==============================================================================
 
-# --- Couleurs ---
+# --- Colors ---
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
@@ -15,11 +15,11 @@ BOLD='\033[1m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}======================================================${NC}"
-echo -e "${BLUE}   Installation de l'environnement client MirzAI      ${NC}"
+echo -e "${BLUE}   Mirza AI -- Client Environment Setup               ${NC}"
 echo -e "${BLUE}======================================================${NC}"
 echo ""
 
-# 1. Verification du systeme de paquets
+# 1. Detect package manager
 if command -v apt-get >/dev/null 2>&1; then
     PKG_MGR="sudo apt-get install -y"
     UPDATE_CMD="sudo apt-get update"
@@ -30,12 +30,12 @@ elif command -v dnf >/dev/null 2>&1; then
     PKG_MGR="sudo dnf install -y"
     UPDATE_CMD="echo 'Skipping dnf update'"
 else
-    echo -e "${RED}[x] Gestionnaire de paquets non reconnu. Installez manuellement: jq, curl, wakeonlan, python3.${NC}"
+    echo -e "${RED}[x] Unknown package manager. Please install manually: jq, curl, wakeonlan, python3.${NC}"
     exit 1
 fi
 
-# 2. Installation des dependances
-echo -e "${YELLOW}[1/4] Verification des dependances locales...${NC}"
+# 2. Install local dependencies
+echo -e "${YELLOW}[1/4] Checking local dependencies...${NC}"
 DEPS="jq curl wakeonlan python3 ssh"
 MISSING_DEPS=""
 
@@ -46,26 +46,26 @@ for dep in $DEPS; do
 done
 
 if [ -n "$MISSING_DEPS" ]; then
-    echo -e " -> Dependances manquantes detectees :$MISSING_DEPS"
-    echo -e " -> Installation en cours (un mot de passe sudo peut etre requis)..."
+    echo -e " -> Missing dependencies detected:$MISSING_DEPS"
+    echo -e " -> Installing now (sudo password may be required)..."
     eval "$UPDATE_CMD" >/dev/null 2>&1
     eval "$PKG_MGR $MISSING_DEPS"
-    echo -e "${GREEN} -> Dependances installees avec succes.${NC}"
+    echo -e "${GREEN} -> Dependencies installed successfully.${NC}"
 else
-    echo -e "${GREEN} -> Toutes les dependances (jq, curl, wakeonlan, python3, ssh) sont deja presentes.${NC}"
+    echo -e "${GREEN} -> All dependencies (jq, curl, wakeonlan, python3, ssh) are already present.${NC}"
 fi
 
-# 3. Creation du lien symbolique pour la commande "mirza"
+# 3. Create the global "mirza" symlink
 echo ""
-echo -e "${YELLOW}[2/4] Configuration de la commande globale 'mirza'...${NC}"
+echo -e "${YELLOW}[2/4] Registering the global 'mirza' command...${NC}"
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
 MIRZA_SH="$SCRIPT_DIR/mirza/mirza.sh"
 BIN_DIR="$HOME/.local/bin"
 
 if [ ! -f "$MIRZA_SH" ]; then
-    echo -e "${RED}[x] Fichier introuvable: $MIRZA_SH${NC}"
-    echo -e "    Assurez-vous d'executer ce script depuis la racine du depot."
+    echo -e "${RED}[x] File not found: $MIRZA_SH${NC}"
+    echo -e "    Make sure you run this script from the root of the repository."
     exit 1
 fi
 
@@ -77,102 +77,103 @@ if [ -L "$BIN_DIR/mirza" ]; then
 fi
 
 ln -s "$MIRZA_SH" "$BIN_DIR/mirza"
-echo -e "${GREEN} -> Lien symbolique cree : $BIN_DIR/mirza -> $MIRZA_SH${NC}"
+echo -e "${GREEN} -> Symlink created: $BIN_DIR/mirza -> $MIRZA_SH${NC}"
 
-# Verifier si ~/.local/bin est dans le PATH
+# Check if ~/.local/bin is in PATH
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
-    echo -e "${YELLOW} -> Attention: $BIN_DIR n'est pas dans votre \$PATH.${NC}"
+    echo -e "${YELLOW} -> Warning: $BIN_DIR is not in your \$PATH.${NC}"
     BASHRC="$HOME/.bashrc"
     ZSHRC="$HOME/.zshrc"
-    
+
     if [ -f "$BASHRC" ]; then
         echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$BASHRC"
-        echo -e " -> Ajoute au PATH dans $BASHRC"
+        echo -e " -> Added to PATH in $BASHRC"
     fi
     if [ -f "$ZSHRC" ]; then
         echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$ZSHRC"
-        echo -e " -> Ajoute au PATH dans $ZSHRC"
+        echo -e " -> Added to PATH in $ZSHRC"
     fi
-    echo -e " -> ${RED}Veuillez redemarrer votre terminal ou taper : source ~/.bashrc${NC}"
+    echo -e " -> ${RED}Please restart your terminal or run: source ~/.bashrc${NC}"
 fi
 
-# 4. Gatcha (sans execution bloquante via SSH)
+# 4. Connectivity & SSH authorization check
 echo ""
-echo -e "${YELLOW}[3/4] Connectivite & Autorisation SSH (Gatcha)...${NC}"
+echo -e "${YELLOW}[3/4] Connectivity & SSH Authorization Check...${NC}"
 TARGET_HOST="mirza.local"
 
 if command -v nc >/dev/null 2>&1; then
     if nc -z -w 2 "$TARGET_HOST" 22 2>/dev/null; then
-         echo -e " ${GREEN}[+] Serveur Mac joignable en SSH sur ${TARGET_HOST}:22${NC}"
+         echo -e " ${GREEN}[+] Mac server reachable via SSH at ${TARGET_HOST}:22${NC}"
     else
-         echo -e " ${RED}[!] Impossible de joindre ${TARGET_HOST}:22. Assurez-vous que le Mac est allume.${NC}"
+         echo -e " ${RED}[!] Cannot reach ${TARGET_HOST}:22. Make sure the Mac is powered on.${NC}"
     fi
 else
     if ping -c 1 -W 2 "$TARGET_HOST" >/dev/null 2>&1; then
-         echo -e " ${GREEN}[+] Serveur Mac joignable via ping sur ${TARGET_HOST}${NC}"
+         echo -e " ${GREEN}[+] Mac server reachable via ping at ${TARGET_HOST}${NC}"
     else
-         echo -e " ${RED}[!] Impossible de pinger ${TARGET_HOST}. Assurez-vous que le Mac est allume.${NC}"
+         echo -e " ${RED}[!] Cannot ping ${TARGET_HOST}. Make sure the Mac is powered on.${NC}"
     fi
 fi
 
-echo -e " -> Info: L'etape d'echange de cles (gatcha.sh) est ignoree pour"
-echo -e "    ne pas bloquer l'installation. Vous pourrez configurer vos cles"
-echo -e "    plus tard en executant : ./mirza/gatcha.sh"
+echo -e " -> Info: SSH key exchange (gatcha.sh) is skipped to avoid blocking the install."
+echo -e "    You can configure keys later by running: ./mirza/gatcha.sh"
 
 
-# 5. Deploiement du dossier serveur et MLX/uv backend
+# 5. Deploy server components, monitoring stack and LLM backend to the Mac
 echo ""
-echo -e "${YELLOW}[4/4] Deploiement des scripts vers le Mac & Setup Backend...${NC}"
-echo -e " Voulez-vous copier la logique serveur vers le Mac et y activer le monitoring (Grafana/Prometheus) maintenant ? (O/n)"
+echo -e "${YELLOW}[4/5] Deploying components to the Mac...${NC}"
+echo -e " Do you want to sync the logic (Monitoring + LLM Backend) to the Mac? (y/N)"
 read -r deploy_resp
-if [[ "$deploy_resp" =~ ^([oO][uU][iI]|[oO]|yes|y|Y)$ ]] || [[ -z "$deploy_resp" ]]; then
-    
-    if [ -f "$HOME/.bashrc" ]; then
-        source "$HOME/.bashrc"
-    fi
-    
+if [[ "$deploy_resp" =~ ^([yY][eE][sS]|[yY]|[oO][uU][iI]|[oO])$ ]] || [[ -z "$deploy_resp" ]]; then
+
     TARGET_USER="${MIRZA_USER}"
     TARGET_HOST="${MIRZA_HOST:-mirza.local}"
-    
+
     if [[ -z "$TARGET_USER" ]]; then
-        echo -e " -> Quel est l'utilisateur SSH du Mac distant ? (ex: petrichoeur)"
+        echo -e " -> What is the SSH username of the remote Mac? (e.g. john)"
         read -r TARGET_USER
     fi
-    
+
     if [ -n "$TARGET_USER" ] && [ -n "$TARGET_HOST" ]; then
-        echo -e "\n --- PUSH DES FICHIERS ---"
+        echo -e "\n --- PUSHING FILES ---"
         if command -v rsync >/dev/null 2>&1; then
-            echo -e " ${CYAN}Synchronisation (rsync) vers ${TARGET_USER}@${TARGET_HOST}:~/mirzaServer/...${NC}"
+            echo -e " ${CYAN}Syncing (rsync) to ${TARGET_USER}@${TARGET_HOST}...${NC}"
             rsync -avz "$SCRIPT_DIR/mirzaServer/" "${TARGET_USER}@${TARGET_HOST}:~/mirzaServer/"
-            echo -e " ${GREEN}[+] Fichiers copies avec succes !${NC}"
+            rsync -avz "$SCRIPT_DIR/llmServe/" "${TARGET_USER}@${TARGET_HOST}:~/llmServe/"
+            echo -e " ${GREEN}[+] Files (Server & LLM backend) synced successfully!${NC}"
         else
-            echo -e " ${CYAN}Copie (scp) vers ${TARGET_USER}@${TARGET_HOST}:~/...${NC}"
+            echo -e " ${CYAN}Copying (scp) to ${TARGET_USER}@${TARGET_HOST}:~/...${NC}"
             scp -r "$SCRIPT_DIR/mirzaServer" "${TARGET_USER}@${TARGET_HOST}:~/"
-            echo -e " ${GREEN}[+] Fichiers copies avec succes !${NC}"
+            scp -r "$SCRIPT_DIR/llmServe" "${TARGET_USER}@${TARGET_HOST}:~/"
+            echo -e " ${GREEN}[+] Files copied successfully!${NC}"
         fi
-        
-        echo -e "\n --- CONFIGURATION DU MONITORING (Grafana / Prometheus) ---"
-        echo -e " Execution de setup_monitoring.sh en distant...\n"
+
+        echo -e "\n --- SETTING UP MONITORING (Grafana / Prometheus) ---"
         ssh "${TARGET_USER}@${TARGET_HOST}" "bash -l -c 'bash ~/mirzaServer/monitoring/setup_monitoring.sh'"
-        
+
+        echo -e "\n --- INITIALIZING AI ENVIRONMENT (uv / llama-cpp-python) ---"
+        echo -e " ${CYAN}Installing Llama.cpp dependencies on the Mac...${NC}"
+        ssh "${TARGET_USER}@${TARGET_HOST}" "bash -l -c 'cd ~/llmServe && uv sync'"
+        echo -e " ${GREEN}[+] Llama.cpp environment ready.${NC}"
+
     else
-        echo -e "${RED} -> Utilisateur ou hote manquant, deploiement annule.${NC}"
+        echo -e "${RED} -> Missing username or host — deployment cancelled.${NC}"
     fi
 else
-    echo " -> Deploiement et installation ignoree."
+    echo " -> Deployment skipped."
 fi
 
 echo ""
 echo -e "${GREEN}======================================================${NC}"
-echo -e "${GREEN}     Installation Complete Validee !                  ${NC}"
+echo -e "${GREEN}     Setup Complete!                                  ${NC}"
 echo -e "${GREEN}======================================================${NC}"
-echo -e "Vous pouvez maintenant piloter votre Mac depuis n'importe ou :"
+echo -e "You can now control your Mac from anywhere:"
 echo ""
-echo -e "${YELLOW} -> Rechargement de l'environnement Bash...${NC}"
+echo -e "${YELLOW} -> Reloading Bash environment...${NC}"
 
 if [ -f "$HOME/.bashrc" ]; then
     source "$HOME/.bashrc"
 fi
 
-echo -e "  -> ${BOLD}IMPORTANT${NC}: Pour activer les commandes immediatement, tapez : ${CYAN}source ~/.bashrc${NC}"
-echo -e "                     ou redemarrez votre terminal."
+echo -e "  -> ${BOLD}IMPORTANT${NC}: To activate the 'mirza' command immediately, run: ${CYAN}source ~/.bashrc${NC}"
+echo -e "               or restart your terminal."

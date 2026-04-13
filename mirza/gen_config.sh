@@ -97,40 +97,37 @@ echo -e "${CYAN}[4/5]${NC} Vérification de l'environnement IA..."
 UV_INSTALLED=$(remote_exec "command -v uv &>/dev/null && echo 'true' || echo 'false'")
 UV_VERSION=$(remote_exec "uv --version 2>/dev/null | head -1 || echo 'N/A'")
 
-VENV_PATH="$HOME/mirza-ai"
-MLX_INSTALLED="false"
-MLX_VERSION="N/A"
-MLX_LM_VERSION="N/A"
+VENV_PATH="$HOME/llmServe"
+LLM_INSTALLED="false"
+LLM_VERSION="N/A"
 PYTHON_VERSION="N/A"
 
-# Check if mirza-ai venv exists and has mlx-lm
+# Check if llmServe venv exists and has llama-cpp-python
 if [ "$UV_INSTALLED" = "true" ]; then
-    PYTHON_VERSION=$(remote_exec "cd ~/mirza-ai 2>/dev/null && uv run python --version 2>/dev/null | awk '{print \$2}' || echo 'N/A'")
-    MLX_VERSION=$(remote_exec "cd ~/mirza-ai 2>/dev/null && uv run python -c 'import mlx; print(mlx.__version__)' 2>/dev/null || echo 'N/A'")
-    MLX_LM_VERSION=$(remote_exec "cd ~/mirza-ai 2>/dev/null && uv run python -c 'import mlx_lm; print(mlx_lm.__version__)' 2>/dev/null || echo 'N/A'")
-    if [ "$MLX_LM_VERSION" != "N/A" ]; then
-        MLX_INSTALLED="true"
+    PYTHON_VERSION=$(remote_exec "cd ~/llmServe 2>/dev/null && uv run python --version 2>/dev/null | awk '{print \$2}' || echo 'N/A'")
+    LLM_VERSION=$(remote_exec "cd ~/llmServe 2>/dev/null && uv run python -c 'import llama_cpp; print(llama_cpp.__version__)' 2>/dev/null || echo 'N/A'")
+    if [ "$LLM_VERSION" != "N/A" ]; then
+        LLM_INSTALLED="true"
     fi
 fi
 
-# Check if MLX server is running
+# Check if LLM server is running
 ACTIVE_MODEL="none"
 API_PORT="8080"
 API_STATUS="stopped"
-MLX_PID=$(remote_exec "pgrep -f 'mlx_lm.server' 2>/dev/null")
-if [ -n "$MLX_PID" ]; then
+LLM_PID=$(remote_exec "pgrep -f 'serve_llama.py' 2>/dev/null")
+if [ -n "$LLM_PID" ]; then
     API_STATUS="running"
     # Try to extract the model from the process command line
-    ACTIVE_MODEL=$(remote_exec "ps -p $MLX_PID -o args= 2>/dev/null | grep -oP '(?<=--model )\S+' || echo 'unknown'")
+    ACTIVE_MODEL=$(remote_exec "ps -p $LLM_PID -o args= 2>/dev/null | grep -oE '/[^ ]+\.gguf' | xargs basename 2>/dev/null || echo 'unknown'")
     # Try to extract the port
-    DETECTED_PORT=$(remote_exec "ps -p $MLX_PID -o args= 2>/dev/null | grep -oP '(?<=--port )\d+' || echo '8080'")
+    DETECTED_PORT=$(remote_exec "ps -p $LLM_PID -o args= 2>/dev/null | grep -oE '--port [0-9]+' | awk '{print \$2}' || echo '8080'")
     API_PORT="${DETECTED_PORT:-8080}"
 fi
 
 echo -e "  uv:           ${YELLOW}${UV_INSTALLED} (${UV_VERSION})${NC}"
 echo -e "  Python:       ${YELLOW}${PYTHON_VERSION}${NC}"
-echo -e "  MLX:          ${YELLOW}${MLX_INSTALLED} (${MLX_VERSION})${NC}"
-echo -e "  mlx-lm:       ${YELLOW}${MLX_LM_VERSION}${NC}"
+echo -e "  Llama-CPP:    ${YELLOW}${LLM_INSTALLED} (${LLM_VERSION})${NC}"
 echo -e "  Serveur API:  ${YELLOW}${API_STATUS}${NC}"
 echo -e "  Modèle actif: ${YELLOW}${ACTIVE_MODEL}${NC}"
 
@@ -185,9 +182,8 @@ disk_available_gb=${DISK_AVAIL}
 uv_installed=${UV_INSTALLED}
 uv_version=${UV_VERSION}
 python_version=${PYTHON_VERSION}
-mlx_installed=${MLX_INSTALLED}
-mlx_version=${MLX_VERSION}
-mlx_lm_version=${MLX_LM_VERSION}
+llm_installed=${LLM_INSTALLED}
+llm_version=${LLM_VERSION}
 active_model=${ACTIVE_MODEL}
 api_port=${API_PORT}
 api_status=${API_STATUS}
