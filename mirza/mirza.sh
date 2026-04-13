@@ -37,12 +37,15 @@ if [ -f "$SSH_KEY" ]; then
     SSH_OPTS="$SSH_OPTS -i $SSH_KEY"
 fi
 
+# Remote PATH fix (ensures uv, brew, etc. are found in non-interactive shells)
+REMOTE_PATH_FIX="export PATH=\$PATH:/opt/homebrew/bin:~/.cargo/bin:~/.local/bin;"
+
 # ==============================================================================
 # Helper functions
 # ==============================================================================
 
 remote_exec() {
-    ssh $SSH_OPTS "$SSH_TARGET" "$1" 2>/dev/null
+    ssh $SSH_OPTS "$SSH_TARGET" "${REMOTE_PATH_FIX} $1" 2>/dev/null
 }
 
 read_conf() {
@@ -457,7 +460,7 @@ cmd_help() {
     echo -e "    ${CYAN}mirza models${NC} [catégorie]  Catalogue de modèles MLX"
     echo -e "    ${CYAN}mirza deploy${NC} <model_id>   Télécharger un modèle sur le serveur"
     echo -e "    ${CYAN}mirza serve${NC}  [model_id]   Démarrer le serveur d'inférence"
-    echo -e "    ${CYAN}mirza stop${NC}               Arrêter le serveur d'inférence"
+    echo -e "    ${CYAN}mirza stop-mlx${NC}           Arrêter le serveur d'inférence"
     echo -e "    ${CYAN}mirza chat${NC}               Chat interactif en terminal"
     echo ""
     echo -e "  ${BOLD}Interface & Config${NC}"
@@ -482,7 +485,7 @@ case "$1" in
     models)         cmd_models "$@" ;;
     deploy)         cmd_deploy "$@" ;;
     serve)          cmd_serve "$@" ;;
-    stop)           cmd_stop ;;
+    stop-mlx)       cmd_stop ;;
     chat)           cmd_chat ;;
     tunnel)         cmd_tunnel "$@" ;;
     ui)             cmd_ui "$@" ;;

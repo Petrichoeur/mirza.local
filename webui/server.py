@@ -30,6 +30,8 @@ MAC_ADDR = os.environ.get("MIRZA_MAC_ADRESS", "")
 API_PORT = os.environ.get("MIRZA_API_PORT", "8080")
 SSH_KEY = Path.home() / ".ssh" / "mirza_key"
 
+# Remote PATH fix (ensures uv, brew, etc. are found in non-interactive shells)
+PATH_FIX = "export PATH=$PATH:/opt/homebrew/bin:~/.cargo/bin:~/.local/bin;"
 PORT = int(os.environ.get("MIRZA_WEBUI_PORT", "3333"))
 
 
@@ -49,8 +51,9 @@ def remote_exec(cmd, timeout=15):
     if not USER_ENV:
         return {"ok": False, "error": "MIRZA_USER non configuré"}
     try:
+        remote_cmd = f"{PATH_FIX} {cmd}"
         result = subprocess.run(
-            ["ssh"] + ssh_opts() + [ssh_target(), cmd],
+            ["ssh"] + ssh_opts() + [ssh_target(), remote_cmd],
             capture_output=True, text=True, timeout=timeout
         )
         return {"ok": result.returncode == 0, "stdout": result.stdout.strip(), "stderr": result.stderr.strip()}
@@ -236,7 +239,8 @@ def handle_api(path, method, body=None):
         return 200, {"ok": r.get("ok", False), "message": f"Déploiement de {hf_repo}", "detail": r}
 
     if path == "/api/mlx/logs" and method == "GET":
-        r = remote_exec("tail -30 /tmp/mirza-mlx.log 2>/dev/null || echo 'Pas de logs disponibles'")
+        cmd = "echo \"=== LOGS MLX (Remote Time: $(date '+%H:%M:%S')) ===\" && echo \"File: /tmp/mirza-mlx.log\" && echo \"--------------------------------------------------\" && tail -100 /tmp/mirza-mlx.log 2>/dev/null || echo 'Pas de logs disponibles'"
+        r = remote_exec(cmd)
         return 200, {"logs": r.get("stdout", "")}
 
     if path == "/api/mlx/installed" and method == "GET":

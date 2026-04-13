@@ -183,7 +183,7 @@
                     <button class="action-btn" id="action-stop-mlx" title="Arrêter le serveur MLX">
                         <span class="action-icon">■</span>
                         <span class="action-label">Stop MLX</span>
-                        <span class="action-hint">mirza stop</span>
+                        <span class="action-hint">mirza stop-mlx</span>
                     </button>
                     <button class="action-btn" id="action-sleep" title="Mettre en veille">
                         <span class="action-icon">☾</span>
@@ -202,11 +202,16 @@
             <div class="dash-section">
                 <div class="dash-section-header">
                     <h2>Logs MLX</h2>
-                    <button class="btn-icon btn-icon-sm" id="btn-refresh-logs" title="Rafraîchir">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-                    </button>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <label style="font-size: 0.75rem; color: var(--text-muted); display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none;">
+                            <input type="checkbox" id="check-auto-logs" style="width: 12px; height: 12px; accent-color: var(--color-primary);"> Auto-refresh
+                        </label>
+                        <button class="btn-icon btn-icon-sm" id="btn-refresh-logs" title="Rafraîchir">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+                        </button>
+                    </div>
                 </div>
-                <pre class="log-output" id="dash-logs">Cliquer pour charger les logs...</pre>
+                <pre class="log-output" id="dash-logs" style="font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.8rem; background: #0c0c0c; border: 1px solid var(--border-color); color: #d1d1d1; max-height: 400px; overflow-y: auto;">Cliquer pour charger les logs...</pre>
             </div>
         </div>
 
@@ -263,17 +268,39 @@
                         <button class="tab-item" id="tab-models-top10" style="padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; border: none; background: transparent; color: var(--text-muted); transition: all 0.2s;">⭐ Top 10 Mirza</button>
                     </div>
                 </div>
-                <div class="models-filters" style="display: flex; gap: 1rem; margin-top: 0.5rem;">
-                    <input type="text" id="filter-search" placeholder="🔍 Rechercher un modèle..." class="select-filter" style="flex: 1; padding: 0.5rem 1rem; cursor: text;">
-                    <select id="filter-family" class="select-filter" style="width: auto;">
-                        <option value="">Toutes familles</option>
-                    </select>
-                    <select id="filter-category" class="select-filter" style="width: auto;">
-                        <option value="">Toutes catégories</option>
-                    </select>
-                    <select id="filter-ram" class="select-filter" style="width: auto;">
-                        <option value="">Toute RAM</option>
-                    </select>
+                <div class="models-filters" style="display: flex; gap: 1rem; margin-top: 0.5rem; align-items: flex-end;">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Recherche</span>
+                        <input type="text" id="filter-search" placeholder="🔍 Nom, repo..." class="select-filter" style="padding: 0.5rem 1rem; cursor: text;">
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Famille</span>
+                        <select id="filter-family" class="select-filter" style="width: auto;">
+                            <option value="">Toutes familles</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Catégorie</span>
+                        <select id="filter-category" class="select-filter" style="width: auto;">
+                            <option value="">Toutes catégories</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">RAM Requis</span>
+                        <select id="filter-ram" class="select-filter" style="width: auto;">
+                            <option value="">Toute RAM</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Trier par</span>
+                        <select id="filter-sort" class="select-filter" style="width: auto;">
+                            <option value="">Par défaut</option>
+                            <option value="toks">Vitesse (tok/s) ↓</option>
+                            <option value="size_desc">Poids (Go) ↓</option>
+                            <option value="size_asc">Poids (Go) ↑</option>
+                            <option value="downloads">Téléchargements ↓</option>
+                        </select>
+                    </div>
                 </div>
             </div>
             <div class="models-grid" id="models-grid">
@@ -346,7 +373,7 @@
                             <tr><td><code>mirza models</code></td><td>Catalogue de modeles compatibles avec votre config.</td></tr>
                             <tr><td><code>mirza deploy &lt;id&gt;</code></td><td>Telecharger un modele sur le Mac.</td></tr>
                             <tr><td><code>mirza serve [id]</code></td><td>Demarrer le serveur d'inference MLX.</td></tr>
-                            <tr><td><code>mirza stop</code></td><td>Arreter le serveur d'inference.</td></tr>
+                            <tr><td><code>mirza stop-mlx</code></td><td>Arreter le serveur d'inference.</td></tr>
                             <tr><td><code>mirza ui</code></td><td>Lancer cette interface web (port 3333).</td></tr>
                             <tr><td><code>mirza stop-ui</code></td><td>Arreter la WebUI.</td></tr>
                             <tr><td><code>mirza config --refresh</code></td><td>Regenerer la configuration en interrogeant le Mac.</td></tr>

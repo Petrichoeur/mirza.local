@@ -114,11 +114,14 @@ function initDom() {
     dom.dashModelName = document.getElementById('dash-model-name');
     dom.dashModelSub = document.getElementById('dash-model-sub');
     dom.dashLogs = document.getElementById('dash-logs');
+    dom.btnRefreshLogs = document.getElementById('btn-refresh-logs');
+    dom.checkAutoLogs = document.getElementById('check-auto-logs');
     dom.modelsGrid = document.getElementById('models-grid');
     dom.configContainer = document.getElementById('config-container');
     dom.filterCategory = document.getElementById('filter-category');
     dom.filterFamily = document.getElementById('filter-family');
     dom.filterRam = document.getElementById('filter-ram');
+    dom.filterSort = document.getElementById('filter-sort');
     dom.filterSearch = document.getElementById('filter-search');
     dom.tabModelsAll = document.getElementById('tab-models-all');
     dom.tabModelsInstalled = document.getElementById('tab-models-installed');
@@ -329,6 +332,7 @@ function setupEventListeners() {
     dom.filterCategory.addEventListener('change', renderFilteredModels);
     if(dom.filterFamily) dom.filterFamily.addEventListener('change', renderFilteredModels);
     dom.filterRam.addEventListener('change', renderFilteredModels);
+    if(dom.filterSort) dom.filterSort.addEventListener('change', renderFilteredModels);
     if(dom.filterSearch) dom.filterSearch.addEventListener('input', renderFilteredModels);
 
     if (dom.tabModelsAll) {
@@ -439,14 +443,23 @@ function setDashStatus(status, text) {
     dom.dashServerStatus.innerHTML = `<div class="status-dot ${status}"></div><span>${text}</span>`;
 }
 
-async function loadLogs() {
-    dom.dashLogs.textContent = 'Chargement...';
+async function loadLogs(silent = false) {
+    if (!silent) dom.dashLogs.textContent = 'Chargement...';
     try {
         const res = await fetch('/api/mlx/logs');
         const data = await res.json();
-        dom.dashLogs.textContent = data.logs || 'Aucun log disponible';
+        if (data.logs) {
+            dom.dashLogs.textContent = data.logs;
+            // Auto-scroll to bottom if it's already near bottom or it's a silent update
+            const isScrolledToBottom = dom.dashLogs.scrollHeight - dom.dashLogs.clientHeight <= dom.dashLogs.scrollTop + 50;
+            if (isScrolledToBottom || silent) {
+                dom.dashLogs.scrollTop = dom.dashLogs.scrollHeight;
+            }
+        } else if (!silent) {
+            dom.dashLogs.textContent = 'Aucun log disponible';
+        }
     } catch (e) {
-        dom.dashLogs.textContent = `Erreur: ${e.message}`;
+        if (!silent) dom.dashLogs.textContent = `Erreur: ${e.message}`;
     }
 }
 
@@ -650,6 +663,21 @@ function renderFilteredModels() {
         models = models.filter(m => m.size_gb <= maxGb);
     }
 
+    if (dom.filterSort && dom.filterSort.value && state.modelsTab !== 'top10') {
+        const sortVal = dom.filterSort.value;
+        models = models.sort((a, b) => {
+            if (sortVal === 'toks') {
+                const toksA = Math.round(bandwidth / (a.size_gb || 1));
+                const toksB = Math.round(bandwidth / (b.size_gb || 1));
+                return toksB - toksA; // Descending
+            }
+            if (sortVal === 'size_desc') return (b.size_gb || 0) - (a.size_gb || 0);
+            if (sortVal === 'size_asc') return (a.size_gb || 0) - (b.size_gb || 0);
+            if (sortVal === 'downloads') return (b.downloads || 0) - (a.downloads || 0);
+            return 0;
+        });
+    }
+
     if (models.length === 0) {
         dom.modelsGrid.innerHTML = '<div class="mcp-empty">Aucun modèle correspondant.</div>';
         return;
@@ -707,8 +735,13 @@ function renderFilteredModels() {
                 ${catTags}
                 ${warningText}
             </div>
-            <div class="model-card-footer">
-                <span class="model-card-stats">↓ ${(m.downloads || 0).toLocaleString()}</span>
+            <div class="model-card-footer" style="align-items: center;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span class="model-card-stats">↓ ${(m.downloads || 0).toLocaleString()}</span>
+                    <a href="https://huggingface.co/${escapeHtml(m.hf_repo)}" target="_blank" class="model-card-stats" style="text-decoration: none; display: flex; align-items: center; gap: 4px;" title="Documentation HuggingFace">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg> Doc
+                    </a>
+                </div>
                 <div style="display:flex;gap:6px;">
                     ${!isInstalled 
                         ? `<button class="model-btn model-btn-deploy" ${isUnsupported ? 'disabled style="cursor:not-allowed;"' : ''} onclick="deployModel('${escapeHtml(m.hf_repo)}')">Télécharger</button>`
@@ -756,8 +789,15 @@ async function serveModel(hfRepo) {
 window.deployModel = deployModel;
 window.serveModel = serveModel;
 
+// Auto-refresh logs interval
+setInterval(() => {
+    if (dom.checkAutoLogs && dom.checkAutoLogs.checked && state.view === 'dashboard') {
+        loadLogs(true);
+    }
+}, 3000);
+
 // =================================================================
-// Config
+// Error Handling
 // =================================================================
 async function loadConfig() {
     try {

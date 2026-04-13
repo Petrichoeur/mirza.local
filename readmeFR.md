@@ -272,7 +272,7 @@ mirza models              # Lister les modeles compatibles depuis le catalogue
 mirza models code         # Filtrer par categorie
 mirza deploy qwen3.5-9b-4bit  # Telecharger un modele sur le Mac
 mirza serve qwen3.5-9b-4bit   # Demarrer le serveur d'inference avec ce modele
-mirza stop                # Arreter le serveur d'inference
+mirza stop-mlx            # Arreter le serveur d'inference
 ```
 
 ### L'API d'inference
@@ -353,7 +353,7 @@ Toutes les commandes utilisent le format `mirza <commande> [arguments]`.
 | `mirza models [categorie]` | Afficher le catalogue de modeles, filtre par compatibilite RAM. Categories : `general`, `code`, `reasoning`, `multimodal`, `light`, `french`. |
 | `mirza deploy <model_id>` | Telecharger un modele sur le Mac (accepte les IDs du catalogue ou les chemins complets de depots HuggingFace). |
 | `mirza serve [model_id]` | Demarrer le serveur d'inference MLX. Utilise le dernier modele deploye si aucun n'est specifie. |
-| `mirza stop` | Arreter le serveur d'inference MLX. |
+| `mirza stop-mlx` | Arreter le serveur d'inference MLX. |
 | `mirza chat` | Session de chat interactive en terminal. |
 
 ### Interface et Configuration

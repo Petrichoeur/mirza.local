@@ -272,7 +272,7 @@ mirza models              # List compatible models from the curated catalog
 mirza models code         # Filter by category
 mirza deploy qwen3.5-9b-4bit  # Download a model to the Mac
 mirza serve qwen3.5-9b-4bit   # Start the inference server with this model
-mirza stop                # Stop the inference server
+mirza stop-mlx            # Stop the inference server
 ```
 
 ### The inference API
@@ -353,7 +353,7 @@ All commands use the format `mirza <command> [arguments]`.
 | `mirza models [category]` | Display the curated model catalog, filtered by RAM compatibility. Categories: `general`, `code`, `reasoning`, `multimodal`, `light`, `french`. |
 | `mirza deploy <model_id>` | Download a model to the Mac (accepts catalog IDs or full HuggingFace repo paths). |
 | `mirza serve [model_id]` | Start the MLX inference server. Uses the last deployed model if none specified. |
-| `mirza stop` | Kill the MLX inference server. |
+| `mirza stop-mlx` | Kill the MLX inference server. |
 | `mirza chat` | Interactive terminal chat session. |
 
 ### Interface and Config
