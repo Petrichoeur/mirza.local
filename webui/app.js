@@ -27,6 +27,8 @@ const state = {
     providers: [],
     activeProviderId: 'mirza-local',
     modelsCatalog: null,
+    installedModels: [],
+    modelsTab: 'all',
     dashboardData: null,
     settings: {
         temperature: 0.7,
@@ -115,7 +117,12 @@ function initDom() {
     dom.modelsGrid = document.getElementById('models-grid');
     dom.configContainer = document.getElementById('config-container');
     dom.filterCategory = document.getElementById('filter-category');
+    dom.filterFamily = document.getElementById('filter-family');
     dom.filterRam = document.getElementById('filter-ram');
+    dom.filterSearch = document.getElementById('filter-search');
+    dom.tabModelsAll = document.getElementById('tab-models-all');
+    dom.tabModelsInstalled = document.getElementById('tab-models-installed');
+    dom.tabModelsTop10 = document.getElementById('tab-models-top10');
     dom.actionWake = document.getElementById('action-wake');
     dom.actionStopMlx = document.getElementById('action-stop-mlx');
     dom.actionSleep = document.getElementById('action-sleep');
@@ -202,6 +209,9 @@ function switchView(viewName) {
         checkProviderStatus();
     }
 
+    if (viewName === 'config' && dom.configContainer.children.length <= 1) loadConfig();
+    if (viewName === 'models' && !state.modelsCatalog) loadModelsCatalog();
+
     dom.sidebar.classList.remove('open');
 }
 
@@ -213,6 +223,26 @@ function setupEventListeners() {
     document.querySelectorAll('.nav-item').forEach(n => {
         n.addEventListener('click', () => switchView(n.dataset.view));
     });
+
+    // IP visibility toggle
+    const toggleIpBtn = document.getElementById('toggle-ip-btn');
+    if (toggleIpBtn) {
+        let ipVisible = false;
+        toggleIpBtn.addEventListener('click', () => {
+            ipVisible = !ipVisible;
+            if (ipVisible) {
+                dom.dashIp.textContent = dom.dashIp.dataset.value;
+                dom.dashIp.classList.remove('obscured-ip');
+                document.getElementById('eye-icon-closed').style.display = 'none';
+                document.getElementById('eye-icon-open').style.display = 'block';
+            } else {
+                dom.dashIp.textContent = '••••••••••••';
+                dom.dashIp.classList.add('obscured-ip');
+                document.getElementById('eye-icon-closed').style.display = 'block';
+                document.getElementById('eye-icon-open').style.display = 'none';
+            }
+        });
+    }
 
     // Mobile sidebar
     dom.sidebarToggle.addEventListener('click', () => dom.sidebar.classList.toggle('open'));
@@ -280,10 +310,16 @@ function setupEventListeners() {
         if (confirm('Arrêter le serveur MLX ?')) apiAction('/api/mlx/stop', 'Arrêt du serveur MLX...');
     });
     dom.actionSleep.addEventListener('click', () => {
-        if (confirm('Mettre le Mac en veille ?')) apiAction('/api/server/sleep', 'Mise en veille...');
+        const pwd = prompt('Mot de passe administrateur du Mac requis pour la mise en veille :');
+        if (pwd !== null) {
+            apiAction('/api/server/sleep', 'Mise en veille...', { sudoAsk: pwd });
+        }
     });
     dom.actionReboot.addEventListener('click', () => {
-        if (confirm('⚠️ Redémarrer le Mac ?')) apiAction('/api/server/reboot', 'Redémarrage...');
+        const pwd = prompt('Mot de passe administrateur du Mac requis pour le redémarrage :');
+        if (pwd !== null) {
+            apiAction('/api/server/reboot', 'Redémarrage...', { sudoAsk: pwd });
+        }
     });
 
     // Config
@@ -291,7 +327,37 @@ function setupEventListeners() {
 
     // Models filters
     dom.filterCategory.addEventListener('change', renderFilteredModels);
+    if(dom.filterFamily) dom.filterFamily.addEventListener('change', renderFilteredModels);
     dom.filterRam.addEventListener('change', renderFilteredModels);
+    if(dom.filterSearch) dom.filterSearch.addEventListener('input', renderFilteredModels);
+
+    if (dom.tabModelsAll) {
+        dom.tabModelsAll.addEventListener('click', () => {
+            state.modelsTab = 'all';
+            dom.tabModelsAll.classList.add('active');
+            dom.tabModelsInstalled.classList.remove('active');
+            if (dom.tabModelsTop10) dom.tabModelsTop10.classList.remove('active');
+            renderFilteredModels();
+        });
+    }
+    if (dom.tabModelsInstalled) {
+        dom.tabModelsInstalled.addEventListener('click', () => {
+            state.modelsTab = 'installed';
+            dom.tabModelsInstalled.classList.add('active');
+            dom.tabModelsAll.classList.remove('active');
+            if (dom.tabModelsTop10) dom.tabModelsTop10.classList.remove('active');
+            renderFilteredModels();
+        });
+    }
+    if (dom.tabModelsTop10) {
+        dom.tabModelsTop10.addEventListener('click', () => {
+            state.modelsTab = 'top10';
+            dom.tabModelsTop10.classList.add('active');
+            dom.tabModelsAll.classList.remove('active');
+            dom.tabModelsInstalled.classList.remove('active');
+            renderFilteredModels();
+        });
+    }
 }
 
 // =================================================================
@@ -314,7 +380,12 @@ async function loadDashboard() {
         const hostAddr = data.host || 'mirza.local';
         dom.dashHost.textContent = hostAddr;
         // Don't fallback to host for IP if we just want IP
-        dom.dashIp.textContent = data.hardware?.ip && data.hardware.ip !== hostAddr ? data.hardware.ip : (data.hardware?.ip || hostAddr);
+        const actualIp = data.hardware?.ip && data.hardware.ip !== hostAddr ? data.hardware.ip : (data.hardware?.ip || hostAddr);
+        dom.dashIp.dataset.value = actualIp;
+        if (!dom.dashIp.classList.contains('obscured-ip')) {
+            dom.dashIp.textContent = actualIp;
+        }
+        
         dom.dashApi.textContent = data.mlx_api ? `✓ Port ${data.api_port}` : '✗ Arrêté';
         dom.dashApi.style.color = data.mlx_api ? 'var(--color-success)' : 'var(--color-text-tertiary)';
         dom.dashGrafana.textContent = data.grafana ? '✓ Port 3000' : '✗ Arrêté';
@@ -362,9 +433,6 @@ async function loadDashboard() {
         setDashStatus('offline', 'Erreur de connexion');
         console.error('Dashboard error:', e);
     }
-
-    // Also load models catalog
-    loadModelsCatalog();
 }
 
 function setDashStatus(status, text) {
@@ -382,10 +450,12 @@ async function loadLogs() {
     }
 }
 
-async function apiAction(endpoint, message) {
+async function apiAction(endpoint, message, extraBody = null) {
     toast(message, 'info');
     try {
-        const res = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' } });
+        let opts = { method: 'POST', headers: { 'Content-Type': 'application/json' } };
+        if (extraBody) opts.body = JSON.stringify(extraBody);
+        const res = await fetch(endpoint, opts);
         const data = await res.json();
         if (data.ok !== false) {
             toast(data.message || 'Commande exécutée', 'success');
@@ -408,8 +478,19 @@ async function loadModelsCatalog() {
         const localData = await res.json();
         
         dom.modelsGrid.innerHTML = `<div class="mcp-empty">Interrogation de HuggingFace API (mlx-community)...</div>`;
-        const hfRes = await fetch('https://huggingface.co/api/models?author=mlx-community&limit=100&sort=downloads&direction=-1');
+        const hfRes = await fetch('https://huggingface.co/api/models?author=mlx-community&limit=1000&sort=downloads&direction=-1');
         const hfModels = await hfRes.json();
+
+        // Fetch installed models
+        try {
+            const instRes = await fetch('/api/mlx/installed');
+            const instData = await instRes.json();
+            if (instData.installed) {
+                state.installedModels = instData.installed;
+            }
+        } catch (e) {
+            console.warn("Could not fetch installed models", e);
+        }
         
         const catalog = [];
         for (const model of hfModels) {
@@ -439,9 +520,9 @@ async function loadModelsCatalog() {
             if (quantization !== "Unknown") bits = parseInt(quantization.replace('bit',''));
             
             let size_gb = Math.round((paramsNum * (bits / 8) + 0.5) * 10) / 10;
-            // OS Overhead 6GB + KV Cache Approx (1.5GB to 3GB)
+            // OS Overhead 4GB + KV Cache Approx (1.5GB to 3GB)
             let kv_cache_gb = paramsNum > 15 ? 3 : 1.5;
-            let min_ram_gb = Math.ceil(size_gb + kv_cache_gb + 6); 
+            let min_ram_gb = Math.ceil(size_gb + kv_cache_gb + 4); 
             
             let cats = [];
             let tag = (model.pipeline_tag || "").toLowerCase();
@@ -466,6 +547,25 @@ async function loadModelsCatalog() {
             });
         }
         
+        // Ensure all installed models appear in the catalog even if they aren't in top 100
+        for (const inst of state.installedModels) {
+            if (!catalog.find(c => (c.hf_repo || '').toLowerCase().trim() === inst.toLowerCase().trim())) {
+                catalog.push({
+                    hf_repo: inst,
+                    name: inst.split('/').pop() || inst,
+                    family: "Local / Cache",
+                    parameters: "N/A",
+                    quantization: "N/A",
+                    size_gb: 0,
+                    kv_cache_gb: 0,
+                    min_ram_gb: 4,
+                    categories: ["general"],
+                    description: "Modèle présent dans votre cache local mais non répertorié dans le top 100 en ligne.",
+                    downloads: 0
+                });
+            }
+        }
+
         localData.catalog = catalog;
         state.modelsCatalog = localData;
         populateFilters(localData);
@@ -481,6 +581,13 @@ function populateFilters(data) {
     Object.entries(data.categories).forEach(([key, cat]) => {
         dom.filterCategory.innerHTML += `<option value="${key}">${cat.icon} ${cat.label}</option>`;
     });
+    if (dom.filterFamily && data.catalog) {
+        const uniqueFams = [...new Set(data.catalog.map(m => m.family || 'Autre'))].sort();
+        dom.filterFamily.innerHTML = '<option value="">Toutes familles</option>';
+        uniqueFams.forEach(fam => {
+            dom.filterFamily.innerHTML += `<option value="${fam}">${fam}</option>`;
+        });
+    }
     if (data.ram_tiers) {
         dom.filterRam.innerHTML = '<option value="">Toute RAM</option>';
         Object.entries(data.ram_tiers).forEach(([key, tier]) => {
@@ -498,8 +605,45 @@ function renderFilteredModels() {
 
     let models = state.modelsCatalog.catalog;
 
+    const _installedNorm = state.installedModels.map(i => i.toLowerCase().trim());
+
+    if (state.modelsTab === 'installed') {
+        models = models.filter(m => _installedNorm.includes((m.hf_repo || '').toLowerCase().trim()));
+    }
+
+    if (dom.filterSearch && dom.filterSearch.value.trim() !== '') {
+        const query = dom.filterSearch.value.toLowerCase();
+        models = models.filter(m => 
+            m.name.toLowerCase().includes(query) || 
+            (m.hf_repo && m.hf_repo.toLowerCase().includes(query))
+        );
+    }
+
+    const macRam = state.dashboardData?.hardware?.ram_gb || 8;
+    const chip = state.dashboardData?.hardware?.chip || "";
+    let bandwidth = 100; // Base M1/M2/M3
+    if (/Max/i.test(chip)) bandwidth = 400;
+    else if (/Pro/i.test(chip)) bandwidth = 200;
+    else if (/Ultra/i.test(chip)) bandwidth = 800;
+
+    if (state.modelsTab === 'top10') {
+        models = models.filter(m => m.min_ram_gb <= macRam);
+        models = models.filter(m => {
+            let toks = Math.round(bandwidth / (m.size_gb || 1));
+            return toks >= 15 && toks <= 35;
+        });
+        models = models.sort((a,b) => {
+            let scoreA = (a.downloads || 0) + ((a.categories?.length || 0) * 50000);
+            let scoreB = (b.downloads || 0) + ((b.categories?.length || 0) * 50000);
+            return scoreB - scoreA;
+        }).slice(0, 10);
+    }
+
     if (catFilter) {
         models = models.filter(m => m.categories?.includes(catFilter));
+    }
+    if (dom.filterFamily && dom.filterFamily.value) {
+        models = models.filter(m => m.family === dom.filterFamily.value);
     }
     if (ramFilter && ramTiers[ramFilter]) {
         const maxGb = ramTiers[ramFilter].max_model_gb;
@@ -507,32 +651,21 @@ function renderFilteredModels() {
     }
 
     if (models.length === 0) {
-        dom.modelsGrid.innerHTML = '<div class="mcp-empty">Aucun modèle correspondant aux filtres</div>';
+        dom.modelsGrid.innerHTML = '<div class="mcp-empty">Aucun modèle correspondant.</div>';
         return;
     }
 
     dom.modelsGrid.innerHTML = '';
+    
     models.forEach(m => {
+        let isInstalled = _installedNorm.includes((m.hf_repo || '').toLowerCase().trim());
         let isRecommended = m.recommended || false;
         let isUnsupported = false;
         let warningText = '';
         
-        const macRam = state.dashboardData?.hardware?.ram_gb;
-        const chip = state.dashboardData?.hardware?.chip || "";
-        
-        // Calculate Tok/s
-        let bandwidth = 100; // Base M1/M2/M3
-        if (/Max/i.test(chip)) bandwidth = 400;
-        else if (/Pro/i.test(chip)) bandwidth = 200;
-        else if (/Ultra/i.test(chip)) bandwidth = 800;
-        else if (/M4/i.test(chip)) bandwidth = 120;
-        if (/M4 Pro/i.test(chip)) bandwidth = 273;
-        if (/M4 Max/i.test(chip)) bandwidth = 546;
-        
         let estimatedToks = Math.round(bandwidth / (m.size_gb || 1));
         
         if (macRam) {
-            // Note: OS requires 6GB overhead min_ram_gb includes it now
             if (macRam < m.min_ram_gb) {
                 isUnsupported = true;
                 isRecommended = false;
@@ -563,10 +696,10 @@ function renderFilteredModels() {
             <div class="model-card-meta" style="flex-wrap: wrap;">
                 <span class="model-tag size">Poids: ${m.size_gb} Go</span>
                 <span class="model-tag size" style="color:var(--color-success)">KV Cache: ${m.kv_cache_gb} Go</span>
-                <span class="model-tag">RAM OS: 6.0 Go</span>
+                <span class="model-tag">RAM OS: 4.0 Go</span>
             </div>
             <div class="model-card-meta" style="flex-wrap: wrap; margin-top: 4px;">    
-                <span class="model-tag star">⚡ ~${estimatedToks} tok/s</span>
+                <span class="model-tag star"> ~${estimatedToks} tok/s</span>
                 <span class="model-tag">⚙️ Flash Attention</span>
                 <span class="model-tag">⚙️ Paged Attention</span>
             </div>
@@ -577,7 +710,10 @@ function renderFilteredModels() {
             <div class="model-card-footer">
                 <span class="model-card-stats">↓ ${(m.downloads || 0).toLocaleString()}</span>
                 <div style="display:flex;gap:6px;">
-                    <button class="model-btn model-btn-deploy" ${isUnsupported ? 'disabled style="cursor:not-allowed;"' : ''} onclick="deployModel('${escapeHtml(m.hf_repo)}')">Télécharger</button>
+                    ${!isInstalled 
+                        ? `<button class="model-btn model-btn-deploy" ${isUnsupported ? 'disabled style="cursor:not-allowed;"' : ''} onclick="deployModel('${escapeHtml(m.hf_repo)}')">Télécharger</button>`
+                        : `<button class="model-btn model-btn-deploy" disabled style="cursor:not-allowed; opacity: 0.5;">Installé ✓</button>`
+                    }
                     <button class="model-btn model-btn-serve" ${isUnsupported ? 'disabled style="cursor:not-allowed;"' : ''} onclick="serveModel('${escapeHtml(m.hf_repo)}')">Servir</button>
                 </div>
             </div>
@@ -638,15 +774,49 @@ async function loadConfig() {
 }
 
 function renderConfig(config) {
+    const sectionMeta = {
+        server: { icon: '&#9670;', label: 'Serveur' },
+        system: { icon: '&#9881;', label: 'Systeme' },
+        hardware: { icon: '&#9879;', label: 'Hardware' },
+        ai: { icon: '&#9733;', label: 'Intelligence Artificielle' },
+        monitoring: { icon: '&#9636;', label: 'Monitoring' },
+    };
+
+    // Override stale monitoring statuses with live data from dashboard
+    const live = state.dashboardData;
+    if (live && config.monitoring) {
+        config.monitoring.grafana_status = live.grafana ? 'running' : 'stopped';
+        if (live.server_online !== undefined) {
+            config.monitoring.prometheus_status = live.server_online ? 'running' : 'stopped';
+            config.monitoring.macmon_status = live.server_online ? 'running' : 'stopped';
+        }
+    }
+    if (live && config.ai) {
+        config.ai.api_status = live.mlx_api ? 'running' : 'stopped';
+        if (live.active_model) config.ai.active_model = live.active_model;
+    }
+
     dom.configContainer.innerHTML = '';
     Object.entries(config).forEach(([section, entries]) => {
+        const meta = sectionMeta[section] || { icon: '&#9632;', label: section };
         const el = document.createElement('div');
         el.className = 'config-section';
+
         let rows = '';
         Object.entries(entries).forEach(([key, val]) => {
-            rows += `<div class="config-row"><span class="config-key">${escapeHtml(key)}</span><span class="config-val">${escapeHtml(val)}</span></div>`;
+            let valClass = 'config-val';
+            let displayVal = escapeHtml(val);
+            if (val === 'true' || val === 'running') {
+                valClass += ' config-val-ok';
+            } else if (val === 'false' || val === 'stopped' || val === 'N/A' || val === 'none') {
+                valClass += ' config-val-off';
+            }
+            rows += `<div class="config-row">
+                <span class="config-key">${escapeHtml(key)}</span>
+                <span class="${valClass}">${displayVal}</span>
+            </div>`;
         });
-        el.innerHTML = `<div class="config-section-header">${escapeHtml(section)}</div><div class="config-rows">${rows}</div>`;
+        el.innerHTML = `<div class="config-section-header"><span>${meta.icon}</span> ${meta.label}</div><div class="config-rows">${rows}</div>`;
         dom.configContainer.appendChild(el);
     });
 }
@@ -803,7 +973,7 @@ async function refreshMcpTools() {
         tools.forEach(t => {
             const item = document.createElement('div');
             item.className = 'mcp-tool-item';
-            item.innerHTML = `<div class="tool-icon">🔧</div><div class="tool-info"><div class="tool-name">${escapeHtml(t.name)}</div><div class="tool-desc">${escapeHtml(t.description || '')}</div></div><input type="checkbox" class="mcp-tool-toggle" ${state.settings.mcpEnabled[t.name] !== false ? 'checked' : ''} data-tool="${escapeHtml(t.name)}" />`;
+            item.innerHTML = `<div class="tool-icon"></div><div class="tool-info"><div class="tool-name">${escapeHtml(t.name)}</div><div class="tool-desc">${escapeHtml(t.description || '')}</div></div><input type="checkbox" class="mcp-tool-toggle" ${state.settings.mcpEnabled[t.name] !== false ? 'checked' : ''} data-tool="${escapeHtml(t.name)}" />`;
             item.querySelector('.mcp-tool-toggle').addEventListener('change', (e) => { state.settings.mcpEnabled[e.target.dataset.tool] = e.target.checked; saveState(); });
             dom.mcpToolsList.appendChild(item);
         });
@@ -899,7 +1069,7 @@ function appendMessageToDOM(msg, index) {
     const isU = msg.role === 'user';
     const content = isU ? `<p>${escapeHtml(msg.content)}</p>` : renderMarkdown(msg.content);
     el.innerHTML = `
-        <div class="message-header"><div class="message-avatar">${isU ? '👤' : '◈'}</div><span class="message-sender">${isU ? 'Vous' : escapeHtml(getActiveProvider().name)}</span></div>
+        <div class="message-header"><div class="message-avatar">${isU ? '' : '◈'}</div><span class="message-sender">${isU ? 'Vous' : escapeHtml(getActiveProvider().name)}</span></div>
         <div class="message-content">${content}</div>
         ${!isU ? `<div class="message-actions"><button class="message-action-btn" onclick="copyMessageContent(${index})"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier</button></div>${msg.meta ? `<div class="message-meta">${msg.meta}</div>` : ''}` : ''}
     `;
@@ -994,7 +1164,7 @@ async function sendMessage() {
         if (e.name === 'AbortError') {
             streamEl.querySelector('.message-content').innerHTML = '<p><em>Annulé.</em></p>';
         } else {
-            streamEl.querySelector('.message-content').innerHTML = `<p style="color:var(--color-error)">⚠️ ${escapeHtml(e.message)}</p>`;
+            streamEl.querySelector('.message-content').innerHTML = `<p style="color:var(--color-error)"> ${escapeHtml(e.message)}</p>`;
         }
     } finally {
         state.isStreaming = false; state.abortController = null;
@@ -1039,14 +1209,8 @@ window.deleteConversation = deleteConversation;
 window.copyMessageContent = copyMessageContent;
 
 // =================================================================
-// Boot — observe view changes for lazy loading
+// Boot — observer removed to prevent infinite loops
 // =================================================================
 document.addEventListener('DOMContentLoaded', () => {
     init();
-    // Lazy-load views on first navigation
-    const observer = new MutationObserver(() => {
-        if (state.currentView === 'config' && dom.configContainer.children.length <= 1) loadConfig();
-        if (state.currentView === 'models' && !state.modelsCatalog) loadModelsCatalog();
-    });
-    observer.observe(document.getElementById('main-content'), { childList: true, subtree: true, attributes: true });
 });

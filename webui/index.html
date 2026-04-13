@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mirza AI — Station Control Panel</title>
-    <meta name="description" content="Panneau de contrôle complet pour Mirza, votre station d'IA locale sur Apple Silicon.">
+    <title>MirzAI — Station Control Panel</title>
+    <meta name="description" content="Panneau de contrôle complet pour MirzAI, votre station d'IA locale sur Apple Silicon.">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -23,7 +23,7 @@
         <div class="sidebar-header">
             <div class="logo">
                 <span class="logo-icon">◈</span>
-                <span class="logo-text">Mirza</span>
+                <span class="logo-text">Mirz</span>
                 <span class="logo-badge">AI</span>
             </div>
         </div>
@@ -120,7 +120,7 @@
                 <!-- Server status card -->
                 <div class="dash-card dash-card-wide">
                     <div class="dash-card-header">
-                        <span class="dash-card-icon">🖥</span>
+                        <span class="dash-card-icon"></span>
                         <h3>Serveur</h3>
                         <div class="status-pill" id="dash-server-status">
                             <div class="status-dot loading"></div>
@@ -129,7 +129,16 @@
                     </div>
                     <div class="dash-card-body" id="dash-server-info">
                         <div class="dash-info-row"><span class="dash-label">Host</span><span class="dash-value" id="dash-host">—</span></div>
-                        <div class="dash-info-row"><span class="dash-label">IP</span><span class="dash-value" id="dash-ip">—</span></div>
+                        <div class="dash-info-row">
+                            <span class="dash-label">IP</span>
+                            <span class="dash-value" style="display: flex; align-items: center; gap: 8px;">
+                                <span id="dash-ip" data-value="—" class="obscured-ip">••••••••••••</span>
+                                <button id="toggle-ip-btn" class="btn-icon btn-icon-sm" title="Afficher/Masquer IP" style="margin: 0; padding: 2px;">
+                                    <svg id="eye-icon-closed" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22"/></svg>
+                                    <svg id="eye-icon-open" style="display:none;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                </button>
+                            </span>
+                        </div>
                         <div class="dash-info-row"><span class="dash-label">API MLX</span><span class="dash-value" id="dash-api">—</span></div>
                         <div class="dash-info-row"><span class="dash-label">Grafana</span><span class="dash-value" id="dash-grafana">—</span></div>
                     </div>
@@ -152,7 +161,7 @@
                 <!-- Active model card -->
                 <div class="dash-card">
                     <div class="dash-card-header">
-                        <span class="dash-card-icon">🧠</span>
+                        <span class="dash-card-icon"></span>
                         <h3>Modèle actif</h3>
                     </div>
                     <div class="dash-card-body">
@@ -205,17 +214,17 @@
         <div class="view" id="view-chat">
             <div class="welcome-screen" id="welcome-screen">
                 <div class="welcome-logo">◈</div>
-                <h1>Mirza AI</h1>
+                <h1>MirzAI</h1>
                 <p class="welcome-subtitle">Votre station d'IA locale sur Apple Silicon</p>
                 <div class="welcome-suggestions">
                     <button class="suggestion-chip" data-prompt="Explique-moi comment fonctionne le machine learning en termes simples.">
-                        <span class="chip-icon">💡</span>Expliquer le ML simplement
+                        <span class="chip-icon"></span>Expliquer le ML simplement
                     </button>
                     <button class="suggestion-chip" data-prompt="Écris un script Python qui analyse un fichier CSV et génère un graphique.">
-                        <span class="chip-icon">💻</span>Script Python pour CSV
+                        <span class="chip-icon"></span>Script Python pour CSV
                     </button>
                     <button class="suggestion-chip" data-prompt="Quels sont les avantages de l'inférence IA locale par rapport au cloud ?">
-                        <span class="chip-icon">🏠</span>IA locale vs Cloud
+                        <span class="chip-icon"></span>IA locale vs Cloud
                     </button>
                     <button class="suggestion-chip" data-prompt="Rédige un email professionnel pour proposer une collaboration sur un projet open-source.">
                         <span class="chip-icon">✉️</span>Email professionnel
@@ -227,7 +236,7 @@
             </div>
             <div class="input-area" id="input-area">
                 <div class="input-wrapper">
-                    <textarea id="message-input" class="message-input" placeholder="Envoyer un message à Mirza..." rows="1" autofocus></textarea>
+                    <textarea id="message-input" class="message-input" placeholder="Envoyer un message à MirzAI..." rows="1" autofocus></textarea>
                     <div class="input-actions">
                         <span class="token-counter" id="token-counter"></span>
                         <button class="btn-send" id="btn-send" title="Envoyer">
@@ -241,13 +250,28 @@
 
         <!-- ═══ VIEW: MODELS ═══ -->
         <div class="view" id="view-models">
-            <div class="view-header">
-                <h1>Catalogue de modèles</h1>
-                <div class="models-filters">
-                    <select id="filter-category" class="select-filter">
+            <div class="view-header" style="flex-direction: column; align-items: stretch; gap: 1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h1>Catalogue & Modèles Installés</h1>
+                    <div class="models-tabs" style="display: flex; gap: 0.5rem; background: var(--bg-hover); padding: 0.25rem; border-radius: 8px;">
+                        <style>
+                            .tab-item.active { background: rgba(147, 51, 234, 0.1) !important; color: var(--color-primary) !important; font-weight: 500; }
+                            .tab-item:hover:not(.active) { color: var(--text-color) !important; }
+                        </style>
+                        <button class="tab-item active" id="tab-models-all" style="padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; border: none; background: transparent; color: var(--text-muted); transition: all 0.2s;">Catalogue Cloud</button>
+                        <button class="tab-item" id="tab-models-installed" style="padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; border: none; background: transparent; color: var(--text-muted); transition: all 0.2s;">Déjà Installés</button>
+                        <button class="tab-item" id="tab-models-top10" style="padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; border: none; background: transparent; color: var(--text-muted); transition: all 0.2s;">⭐ Top 10 Mirza</button>
+                    </div>
+                </div>
+                <div class="models-filters" style="display: flex; gap: 1rem; margin-top: 0.5rem;">
+                    <input type="text" id="filter-search" placeholder="🔍 Rechercher un modèle..." class="select-filter" style="flex: 1; padding: 0.5rem 1rem; cursor: text;">
+                    <select id="filter-family" class="select-filter" style="width: auto;">
+                        <option value="">Toutes familles</option>
+                    </select>
+                    <select id="filter-category" class="select-filter" style="width: auto;">
                         <option value="">Toutes catégories</option>
                     </select>
-                    <select id="filter-ram" class="select-filter">
+                    <select id="filter-ram" class="select-filter" style="width: auto;">
                         <option value="">Toute RAM</option>
                     </select>
                 </div>
@@ -293,7 +317,7 @@
 
                 <div class="docs-section">
                     <h2>Apercu rapide</h2>
-                    <p>Mirza est un toolkit pour piloter un Mac Mini Apple Silicon comme serveur d'IA headless depuis n'importe quel poste Linux. Le Mac tourne les modeles en local via MLX. Vous le controlez via le CLI <code>mirza</code> ou cette interface web.</p>
+                    <p>MirzAI est un toolkit pour piloter un Mac Mini Apple Silicon comme serveur d'IA headless depuis n'importe quel poste Linux. Le Mac tourne les modeles en local via MLX. Vous le controlez via le CLI <code>mirza</code> ou cette interface web.</p>
                 </div>
 
                 <div class="docs-section">
@@ -412,11 +436,11 @@
                     </div>
                     <div class="setting-group">
                         <label for="setting-system-prompt">System prompt</label>
-                        <textarea id="setting-system-prompt" class="setting-textarea" rows="4">Tu es Mirza, un assistant IA intelligent et serviable. Tu réponds de manière claire, précise et concise en français.</textarea>
+                        <textarea id="setting-system-prompt" class="setting-textarea" rows="4">Tu es MirzAI, un assistant IA intelligent et serviable. Tu réponds de manière claire, précise et concise en français.</textarea>
                     </div>
                 </div>
                 <div class="tab-content" id="tab-tools">
-                    <div class="tools-status"><div class="tools-status-icon">🔧</div><h3>Model Context Protocol</h3><p class="setting-hint">Connectez un serveur MCP pour donner des outils au modèle.</p></div>
+                    <div class="tools-status"><div class="tools-status-icon"></div><h3>Model Context Protocol</h3><p class="setting-hint">Connectez un serveur MCP pour donner des outils au modèle.</p></div>
                     <div class="setting-group">
                         <label for="setting-mcp-endpoint">Endpoint MCP</label>
                         <input type="text" id="setting-mcp-endpoint" class="setting-input" value="" placeholder="http://localhost:3001" />

@@ -76,7 +76,7 @@ cmd_ssh() {
 
 cmd_sleep() {
     echo -e "${YELLOW}[☾] Sleep mode: $HOST...${NC}"
-    ssh $SSH_OPTS "$SSH_TARGET" 'pmset sleepnow'
+    ssh -t $SSH_OPTS "$SSH_TARGET" 'sudo pmset sleepnow'
 }
 
 cmd_reboot() {
@@ -331,7 +331,7 @@ cmd_stop() {
 }
 
 cmd_chat() {
-    echo -e "${BLUE}[💬] Chat interactif avec Mirza${NC}"
+    echo -e "${BLUE}[] Chat interactif avec Mirza${NC}"
     echo -e "${DIM}  Endpoint: http://${HOST}:${API_PORT}/v1/chat/completions${NC}"
     echo -e "${DIM}  Tapez 'exit' pour quitter, 'clear' pour réinitialiser${NC}"
     echo ""
@@ -413,7 +413,7 @@ cmd_ui() {
         return 1
     fi
 
-    echo -e "${BLUE}[🖥] Lancement de la WebUI Mirza...${NC}"
+    echo -e "${BLUE}[] Lancement de la WebUI Mirza...${NC}"
     echo ""
 
     # Check if tunnel is needed (are we on the same machine as the server?)

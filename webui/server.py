@@ -202,11 +202,15 @@ def handle_api(path, method, body=None):
             return 500, {"ok": False, "error": "wakeonlan non installé (apt install wakeonlan)"}
 
     if path == "/api/server/sleep" and method == "POST":
-        r = remote_exec("pmset sleepnow")
+        sudo_pwd = body.get("sudoAsk", "") if isinstance(body, dict) else ""
+        cmd = f'echo "{sudo_pwd}" | sudo -S pmset sleepnow' if sudo_pwd else "sudo pmset sleepnow"
+        r = remote_exec(cmd)
         return 200, r
 
     if path == "/api/server/reboot" and method == "POST":
-        r = remote_exec("sudo shutdown -r now")
+        sudo_pwd = body.get("sudoAsk", "") if isinstance(body, dict) else ""
+        cmd = f'echo "{sudo_pwd}" | sudo -S shutdown -r now' if sudo_pwd else "sudo shutdown -r now"
+        r = remote_exec(cmd)
         return 200, r
 
     # ── MLX server controls ─────────────────────────────
@@ -235,6 +239,18 @@ def handle_api(path, method, body=None):
         r = remote_exec("tail -30 /tmp/mirza-mlx.log 2>/dev/null || echo 'Pas de logs disponibles'")
         return 200, {"logs": r.get("stdout", "")}
 
+    if path == "/api/mlx/installed" and method == "GET":
+        cmd = "ls -1 ~/.cache/huggingface/hub/ 2>/dev/null | grep '^models--' | sed 's/^models--//' | sed 's/--/\\//g'"
+        r = remote_exec(cmd)
+        installed = []
+        if r.get("ok") and r.get("stdout"):
+            for line in r["stdout"].split("\n"):
+                line = line.strip()
+                if line:
+                    installed.append(line)
+        return 200, {"installed": installed}
+
+    print(f"\n[DEBUG] 404 Triggered on path: '{path}' method: '{method}'")
     return 404, {"error": f"Route inconnue: {method} {path}"}
 
 

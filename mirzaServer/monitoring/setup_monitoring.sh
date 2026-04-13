@@ -12,6 +12,10 @@ CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # --- 100% Dynamic Variables (Look, no hardcoding!) ---
+# Ensure Homebrew is in PATH (non-interactive SSH sessions don't load .zprofile)
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null)" || true
+
 SERVER_NAME=$(scutil --get LocalHostName 2>/dev/null | tr '[:upper:]' '[:lower:]' || echo "mac-server")
 SERVER_NAME_UPPER=$(echo "$SERVER_NAME" | tr '[:lower:]' '[:upper:]')
 LOCAL_DOMAIN="${SERVER_NAME}.local"
@@ -87,7 +91,7 @@ echo ""
 echo -e "${GREEN}[1/6]${NC} ${CYAN}Wiring up macmon (nohup + crontab @reboot)...${NC}"
 
 MACMON_BIN=$(which macmon)
-MACMON_CMD="nohup ${MACMON_BIN} serve --port ${MACMON_PORT} --interval 1000 > /tmp/macmon.stdout.log 2>/tmp/macmon.stderr.log &"
+MACMON_CMD="nohup ${MACMON_BIN} serve --port ${MACMON_PORT} --interval 1000 </dev/null > /tmp/macmon.stdout.log 2>/tmp/macmon.stderr.log &"
 
 # Kill any existing macmon instance
 pkill -f "macmon serve" 2>/dev/null
@@ -99,7 +103,7 @@ echo " -> macmon started (PID $!)."
 
 # Register in crontab @reboot (remove old entry first)
 ( crontab -l 2>/dev/null | grep -v "macmon serve" ; echo "@reboot ${MACMON_CMD}" ) | crontab -
-echo " -> macmon registered in crontab @reboot. Survives reboots. 🔁"
+echo " -> macmon registered in crontab @reboot. Survives reboots. "
 
 # ---------------------------------------------------------
 # STEP 2: Prometheus Scrape Config
@@ -112,50 +116,76 @@ global:
 scrape_configs:
   - job_name: "prometheus"
     static_configs:
-      - targets: ["localhost:9090"]
+      - targets: ["127.0.0.1:9090"]
 
   # Standard OS metrics (CPU, disk, network, filesystem...)
   - job_name: "${SERVER_NAME}_node"
     static_configs:
-      - targets: ["localhost:${NODE_EXP_PORT}"]
+      - targets: ["127.0.0.1:${NODE_EXP_PORT}"]
     scrape_interval: 15s
 
   # Apple Silicon metrics (CPU/GPU/ANE power, temps, RAM, clusters)
   # Powered by macmon — no sudo required!
   - job_name: "${SERVER_NAME}_apple_silicon"
     static_configs:
-      - targets: ["localhost:${MACMON_PORT}"]
+      - targets: ["127.0.0.1:${MACMON_PORT}"]
     scrape_interval: 5s
 PROMYML
 echo " -> Targets acquired. node_exporter + macmon on the radar."
 
 # ---------------------------------------------------------
-# STEP 3: Prometheus Storage Limits (The Disk Saver)
+# STEP 3: Check and repair Prometheus plist corruption
 # ---------------------------------------------------------
-echo -e "${GREEN}[3/6]${NC} Taming the TSDB Storage Monster (5GB / 30 Days max)..."
-if ! grep -q "retention.time" "$PLIST_FILE"; then
-    perl -pi -e 's/<\/array>/  <string>--storage.tsdb.retention.time=30d<\/string>\n    <string>--storage.tsdb.retention.size=5GB<\/string>\n  <\/array>/' "$PLIST_FILE"
-    echo " -> Limits injected! Your SSD breathes a sigh of relief."
+echo -e "${GREEN}[3/6]${NC} Checking Prometheus configuration health..."
+if grep -q "retention.size" "$PLIST_FILE" 2>/dev/null; then
+    echo -e "${YELLOW} -> Old corrupted plist detected. Reinstalling Prometheus to fix...${NC}"
+    brew reinstall prometheus
+    echo " -> Prometheus repaired."
 else
-    echo -e "${YELLOW} -> Storage limits already exist. Moving on!${NC}"
+    echo " -> Prometheus configuration looks healthy."
 fi
 
 # ---------------------------------------------------------
-# STEP 4: Grafana — patch grafana.ini provisioning path
+# STEP 4: Grafana — patch grafana.ini for provisioning + anonymous + iframe
 # ---------------------------------------------------------
-echo -e "${GREEN}[4/6]${NC} Patching Grafana config to enable IaC provisioning..."
+echo -e "${GREEN}[4/6]${NC} Patching Grafana config..."
 
-# Uncomment and set the provisioning path to our Homebrew directory
-# This is the key fix: by default Grafana looks at conf/provisioning (relative)
-# which doesn't exist in a Homebrew install — we point it to the right place.
+# Set provisioning path
 if grep -q "^provisioning" "$GRAFANA_INI"; then
-    # Already set — update it
     sed -i '' "s|^provisioning = .*|provisioning = $BREW_PREFIX/etc/grafana/provisioning|" "$GRAFANA_INI"
 else
-    # Commented out — uncomment and set
     sed -i '' "s|;provisioning = conf/provisioning|provisioning = $BREW_PREFIX/etc/grafana/provisioning|" "$GRAFANA_INI"
 fi
-echo " -> grafana.ini patched: provisioning → $BREW_PREFIX/etc/grafana/provisioning"
+echo " -> Provisioning path set."
+
+# Enable iframe embedding: [security] allow_embedding = true
+if grep -q "^allow_embedding" "$GRAFANA_INI"; then
+    sed -i '' 's/^allow_embedding.*/allow_embedding = true/' "$GRAFANA_INI"
+elif grep -q ";allow_embedding" "$GRAFANA_INI"; then
+    sed -i '' 's/;allow_embedding.*/allow_embedding = true/' "$GRAFANA_INI"
+else
+    # Append under [security] if it exists, otherwise just append
+    echo "allow_embedding = true" >> "$GRAFANA_INI"
+fi
+echo " -> allow_embedding = true"
+
+# Enable anonymous access: [auth.anonymous] enabled = true, org_role = Viewer
+# This lets the WebUI iframe load Grafana without a login screen.
+if grep -q "^\[auth.anonymous\]" "$GRAFANA_INI"; then
+    sed -i '' '/^\[auth.anonymous\]/,/^\[/ s/;enabled = .*/enabled = true/' "$GRAFANA_INI"
+    sed -i '' '/^\[auth.anonymous\]/,/^\[/ s/^enabled = .*/enabled = true/' "$GRAFANA_INI"
+    sed -i '' '/^\[auth.anonymous\]/,/^\[/ s/;org_role = .*/org_role = Viewer/' "$GRAFANA_INI"
+    sed -i '' '/^\[auth.anonymous\]/,/^\[/ s/^org_role = .*/org_role = Viewer/' "$GRAFANA_INI"
+elif grep -q ";\[auth.anonymous\]" "$GRAFANA_INI"; then
+    sed -i '' 's/^;\[auth.anonymous\]/[auth.anonymous]/' "$GRAFANA_INI"
+    sed -i '' '/^\[auth.anonymous\]/,/^\[/ s/;enabled = .*/enabled = true/' "$GRAFANA_INI"
+    sed -i '' '/^\[auth.anonymous\]/,/^\[/ s/;org_role = .*/org_role = Viewer/' "$GRAFANA_INI"
+else
+    printf '\n[auth.anonymous]\nenabled = true\norg_role = Viewer\n' >> "$GRAFANA_INI"
+fi
+echo " -> Anonymous access = ON, role = Viewer"
+echo " -> Grafana will load in the WebUI iframe without login."
+
 
 # ---------------------------------------------------------
 # STEP 5: Grafana Data Source Provisioning
@@ -168,7 +198,7 @@ datasources:
   - name: Prometheus
     type: prometheus
     access: proxy
-    url: http://localhost:9090
+    url: http://127.0.0.1:9090
     isDefault: true
     editable: false
 GRAFANADS
@@ -210,15 +240,36 @@ echo ""
 echo -e "${BLUE}--- Phase 3: Starting all services ---${NC}"
 echo ""
 
-brew services restart node_exporter
-brew services restart prometheus
+echo " -> Attempting to start services via Homebrew..."
+brew services restart node_exporter 2>/dev/null || true
+brew services restart prometheus 2>/dev/null || true
+brew services restart grafana 2>/dev/null || true
 
-# Removed DB wipe to keep previous data
-echo " -> Restarting Grafana without wiping DB..."
-brew services stop grafana
-brew services start grafana
+# Always ensure they are actually running (SSH fallback)
+# If brew services failed (e.g. over SSH), old processes might still be running and need a manual restart.
+echo " -> Forcing context refresh for monitoring services..."
+pkill -x node_exporter 2>/dev/null || true
+pkill -x prometheus 2>/dev/null || true
+pkill -f grafana.*server 2>/dev/null || true
+sleep 2
 
-# Add crontab @reboot entries for Homebrew services as a failsafe
+if ! pgrep -x "node_exporter" >/dev/null; then
+    nohup "$BREW_PREFIX/opt/node_exporter/bin/node_exporter" >/dev/null 2>&1 &
+fi
+
+if ! pgrep -x "prometheus" >/dev/null; then
+    nohup "$BREW_PREFIX/opt/prometheus/bin/prometheus" --config.file="$PROM_YML" --storage.tsdb.path="$BREW_PREFIX/var/prometheus" >/dev/null 2>&1 &
+fi
+
+if ! pgrep -f "grafana" >/dev/null; then
+    cd "$BREW_PREFIX/share/grafana" 2>/dev/null || cd "$BREW_PREFIX/opt/grafana/share/grafana" 2>/dev/null || true
+    if [ -x "$BREW_PREFIX/opt/grafana/bin/grafana-server" ]; then
+        nohup "$BREW_PREFIX/opt/grafana/bin/grafana-server" --config="$GRAFANA_INI" >/dev/null 2>&1 &
+    else
+        nohup "$BREW_PREFIX/opt/grafana/bin/grafana" server --config="$GRAFANA_INI" >/dev/null 2>&1 &
+    fi
+    cd - >/dev/null
+fi
 echo " -> Adding @reboot triggers for brew services to help them start without GUI login..."
 ( crontab -l 2>/dev/null | grep -v "brew services restart grafana" ; echo "@reboot $(which brew) services restart grafana prometheus node_exporter" ) | crontab -
 

@@ -1598,6 +1598,15 @@ body {
     text-align: right;
 }
 
+.obscured-ip {
+    letter-spacing: 2px;
+    font-family: var(--font-mono);
+    color: var(--color-text-tertiary);
+    font-size: var(--text-xs);
+    position: relative;
+    top: -1px;
+}
+
 .dash-model-name {
     font-size: var(--text-lg);
     font-weight: 600;
@@ -1868,13 +1877,14 @@ body {
 
 /* ═══════════════════════════════════════════════════════════════
    CONFIG VIEWER
-   ═══════════════════════════════════════════════════════════════ */
+   =============================================================== */
 .config-container {
     padding: var(--spacing-xl) var(--spacing-2xl);
     overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: var(--spacing-xl);
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+    gap: var(--spacing-lg);
+    max-height: calc(100vh - 120px);
 }
 
 .config-section {
@@ -1882,6 +1892,11 @@ body {
     border: 1px solid var(--color-surface-border);
     border-radius: var(--radius-lg);
     overflow: hidden;
+    transition: border-color var(--transition-fast);
+}
+
+.config-section:hover {
+    border-color: var(--color-accent-subtle);
 }
 
 .config-section-header {
@@ -1893,10 +1908,13 @@ body {
     color: var(--color-accent);
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-sm);
 }
 
 .config-rows {
-    padding: var(--spacing-sm) 0;
+    padding: var(--spacing-xs) 0;
 }
 
 .config-row {
@@ -1905,6 +1923,7 @@ body {
     justify-content: space-between;
     padding: var(--spacing-sm) var(--spacing-xl);
     gap: var(--spacing-md);
+    transition: background var(--transition-fast);
 }
 
 .config-row:hover {
@@ -1914,7 +1933,8 @@ body {
 .config-key {
     font-size: var(--text-sm);
     color: var(--color-text-tertiary);
-    min-width: 160px;
+    min-width: 120px;
+    flex-shrink: 0;
 }
 
 .config-val {
@@ -1923,6 +1943,16 @@ body {
     color: var(--color-text-primary);
     text-align: right;
     word-break: break-all;
+    min-width: 0;
+}
+
+.config-val-ok {
+    color: var(--color-success);
+}
+
+.config-val-off {
+    color: var(--color-text-tertiary);
+    opacity: 0.6;
 }
 
 /* ═══════════════════════════════════════════════════════════════

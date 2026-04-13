@@ -12,6 +12,10 @@ RED='\033[0;31m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+# Ensure Homebrew is in PATH (non-interactive SSH sessions don't load .zprofile)
+export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
+eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null)" || true
+
 # --- Configuration ---
 MIRZA_AI_DIR="$HOME/mirza-ai"
 PLIST_NAME="com.mirza.mlx-server"
@@ -245,8 +249,18 @@ PLIST
 echo -e "${GREEN}  ✓ LaunchAgent créé: ${PLIST_PATH}${NC}"
 
 # Load the agent
-launchctl load "$PLIST_PATH"
-echo -e "${GREEN}  ✓ LaunchAgent chargé — le serveur MLX démarrera automatiquement au boot.${NC}"
+if ! launchctl load "$PLIST_PATH" 2>/dev/null; then
+    echo -e "${YELLOW}  → launchctl failed (expected via non-interactive SSH).${NC}"
+else
+    echo -e "${GREEN}  ✓ LaunchAgent chargé — le serveur MLX démarrera automatiquement au boot.${NC}"
+fi
+
+# Force manual start in background if not running (crucial for SSH deployment)
+if ! pgrep -f "mlx_lm.server" > /dev/null; then
+    echo -e "${CYAN}  → Lancement manuel du serveur en arrière-plan...${NC}"
+    nohup "$MIRZA_AI_DIR/start_server.sh" > /tmp/mirza-mlx-server.stdout.log 2> /tmp/mirza-mlx-server.stderr.log &
+    sleep 2
+fi
 echo ""
 
 # ==============================================================================

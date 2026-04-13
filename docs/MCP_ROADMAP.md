@@ -1,4 +1,4 @@
-# 🔧 Mirza MCP — Micro Serveur Model Context Protocol
+#  Mirza MCP — Micro Serveur Model Context Protocol
 
 Roadmap pour développer un micro-serveur MCP (Model Context Protocol) qui donne des **outils** au modèle LLM, exécutable soit sur le Mac (Mirza), soit sur la machine cliente.
 
@@ -227,11 +227,11 @@ Possibilité de charger des outils depuis un registre distant (GitHub, npm-style
 
 | Phase | Effort | Priorité |
 |---|---|---|
-| Phase 1 — MVP (3 outils) | ~1 jour | 🔴 Haute |
-| Phase 2 — Outils avancés | ~2 jours | 🟡 Moyenne |
-| Phase 3 — Intégration WebUI | ~1 jour | 🔴 Haute |
-| Phase 4 — Plugins | ~1 jour | 🟢 Basse |
-| Phase 5 — Sécurité | ~1 jour | 🟡 Moyenne |
+| Phase 1 — MVP (3 outils) | ~1 jour |  Haute |
+| Phase 2 — Outils avancés | ~2 jours |  Moyenne |
+| Phase 3 — Intégration WebUI | ~1 jour |  Haute |
+| Phase 4 — Plugins | ~1 jour |  Basse |
+| Phase 5 — Sécurité | ~1 jour |  Moyenne |
 
 ---
 
