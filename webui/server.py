@@ -11,9 +11,15 @@ import subprocess
 import socketserver
 import urllib.parse
 import mimetypes
-import socket
 import time
+import threading
+import re
+from datetime import datetime
 from pathlib import Path
+
+# API Cache to prevent flooding
+_STATUS_CACHE = {"time": 0, "data": None}
+_CACHE_LOCK = threading.Lock()
 
 # ═══════════════════════════════════════════════════════════════
 # Configuration
@@ -118,26 +124,79 @@ def check_port(host, port, timeout=2):
 # API Router
 # ═══════════════════════════════════════════════════════════════
 
+def get_vram_metrics():
+    """Extract VRAM/Unified Memory metrics from mirza-llm.log on the station."""
+    # Increase tail to make sure we catch initial load logs even after long chats
+    cmd = "grep -E 'Mapped model buffer|KV buffer size|compute buffer size|GPU name: MTL0' /tmp/mirza-llm.log | tail -n 20"
+    r = remote_exec(cmd)
+    
+    metrics = {"weights": 0.0, "kv": 0.0, "compute": 0.0, "total": 0.0, "metal_active": False}
+    if not r.get("ok") or not r.get("stdout"):
+        return metrics
+
+    for line in r["stdout"].splitlines():
+        if "GPU name: MTL0" in line:
+            metrics["metal_active"] = True
+
+        # Weights (Mapped)
+        # load_tensors:  MTL0_Mapped model buffer size =  4747.02 MiB
+        m = re.search(r"(?:MTL0|CPU)_Mapped model buffer size =\s+([\d\.]+)", line)
+        if m: metrics["weights"] = float(m.group(1))
+        
+        # KV Cache
+        # llama_kv_cache:       MTL0 KV buffer size =   544.00 MiB
+        m = re.search(r"(?:MTL0|CPU) KV buffer size =\s+([\d\.]+)", line)
+        if m: metrics["kv"] = float(m.group(1))
+
+        # Compute buffer
+        # sched_reserve:       MTL0 compute buffer size =   258.50 MiB
+        m = re.search(r"MTL0 compute buffer size =\s+([\d\.]+)", line)
+        if m: metrics["compute"] = float(m.group(1))
+        
+    metrics["total"] = metrics["weights"] + metrics["kv"] + metrics["compute"]
+    return metrics
+
+
 def handle_api(path, method, body=None):
     """Route API requests and return (status_code, response_dict)."""
 
-    # ── Status ──────────────────────────────────────────
     if path == "/api/status" and method == "GET":
+        global _STATUS_CACHE
+        with _CACHE_LOCK:
+            now = time.time()
+            if _STATUS_CACHE["data"] and now - _STATUS_CACHE["time"] < 2.0:
+                return 200, _STATUS_CACHE["data"]
+
         online = check_ping(HOST_ENV)
-        llm_api = check_port(HOST_ENV, API_PORT) if online else False
-        grafana = check_port(HOST_ENV, 3000) if online else False
-
+        
+        # Robust status check via SSH (bypasses network/firewall issues)
+        llm_api = False
+        grafana = False
         active_model = None
-        if llm_api:
-            try:
-                import urllib.request
-                req = urllib.request.urlopen(f"http://{HOST_ENV}:{API_PORT}/v1/models", timeout=3)
-                data = json.loads(req.read())
-                if data.get("data"):
-                    active_model = data["data"][0].get("id", "unknown")
-            except:
-                pass
-
+        
+        if online:
+            # Batch remote checks with robust separator
+            # - pgrep -f "llama_cpp.server"
+            # - pgrep -f "grafana"
+            # - cat ~/llmServe/active_model.json
+            remote_check = remote_exec("pgrep -f 'llama_cpp.server' || echo '0'; echo '###'; pgrep -f 'grafana' || echo '0'; echo '###'; cat ~/llmServe/active_model.json 2>/dev/null || echo '{}'")
+            if remote_check.get("ok") and remote_check.get("stdout"):
+                sections = remote_check["stdout"].split("###")
+                if len(sections) >= 1:
+                    llm_api = sections[0].strip() != "0"
+                if len(sections) >= 2:
+                    grafana = sections[1].strip() != "0"
+                if len(sections) >= 3:
+                    try:
+                        state_data = json.loads(sections[2].strip() or "{}")
+                        active_model = state_data.get("repo", state_data.get("file", "Active Session")) if llm_api else None
+                    except:
+                        active_model = "Active Session" if llm_api else None
+                
+                # Ultimate fallback
+                if llm_api and not active_model:
+                    active_model = "Active Session"
+        
         conf = read_conf()
         hardware = {}
         if conf:
@@ -152,7 +211,9 @@ def handle_api(path, method, body=None):
             hardware["hostname"] = srv.get("hostname", HOST_ENV)
             hardware["ip"] = srv.get("ip", HOST_ENV)
 
-        return 200, {
+        vram = get_vram_metrics() if llm_api else None
+        
+        result = {
             "server_online": online,
             "llm_api": llm_api,
             "grafana": grafana,
@@ -161,7 +222,32 @@ def handle_api(path, method, body=None):
             "api_port": API_PORT,
             "hardware": hardware,
             "config_available": conf is not None,
+            "vram_metrics": vram
         }
+        
+        with _CACHE_LOCK:
+            _STATUS_CACHE = {"time": time.time(), "data": result}
+            
+        return 200, result
+
+    # ── Chat Proxy (Advanced) ───────────────────────────
+    if path == "/api/chat" and method == "POST":
+        import http.client
+        try:
+            # Check if we should use localhost (SSH tunnel) or the remote IP
+            # We prefer localhost if on a laptop to avoid latency/timeout issues
+            target_host = "127.0.0.1" if check_port("127.0.0.1", API_PORT, timeout=0.1) else HOST_ENV
+            
+            conn = http.client.HTTPConnection(target_host, int(API_PORT), timeout=180)
+            payload = json.dumps(body).encode()
+            conn.request("POST", "/v1/chat/completions", body=payload, headers={
+                "Content-Type": "application/json",
+                "Connection": "keep-alive"
+            })
+            resp = conn.getresponse()
+            return resp.status, resp
+        except Exception as e:
+            return 502, {"ok": False, "error": f"Proxy error: {str(e)}"}
 
     # ── Config ──────────────────────────────────────────
     if path == "/api/config" and method == "GET":
@@ -170,7 +256,29 @@ def handle_api(path, method, body=None):
             return 200, {"config": conf}
         return 404, {"error": "mirza.conf not found. Run: mirza config --refresh"}
 
-    if path == "/api/config/refresh" and method == "POST":
+    if path == "/api/llm/monitoring" and method == "GET":
+        # Discover Grafana dashboard UID and construct URL
+        # 1. Search for dashboards with "Mirza"
+        r_search = remote_exec("curl -s 'http://localhost:3000/api/search?query=Mirza%20Monitor'")
+        uid = "ad5vxgh" # Fallback to known default
+        slug = ""
+        
+        if r_search.get("ok") and r_search.get("stdout"):
+            try:
+                results = json.loads(r_search["stdout"])
+                if results and isinstance(results, list):
+                    # Prefer "Monitor Lite" if it exists
+                    lite = next((d for d in results if "Monitor Lite" in d.get("title", "")), results[0])
+                    uid = lite.get("uid", uid)
+                    slug = lite.get("url", "").split("/")[-1]
+            except Exception as e:
+                print(f"[Monitoring] Search error: {e}")
+
+        # Construct full URL using CURRENT station Host/IP
+        host = HOST_ENV or "mirza.local"
+        # Always return the full path to avoid iframe issues
+        url = f"http://{host}:3000/d/{uid}/{slug}?orgId=1&kiosk"
+        return 200, {"ok": True, "url": url, "uid": uid}
         gen_script = MIRZA_DIR / "gen_config.sh"
         if gen_script.exists():
             try:
@@ -241,12 +349,28 @@ def handle_api(path, method, body=None):
         if not model_path:
             return 400, {"ok": False, "error": "No model specified and no active model found."}
 
+        # Fuzzy resolution: if it's an org/repo ID, try to find a matching file in ~/mirza-models/
+        if "/" in model_path and not model_path.startswith("/") and not model_path.startswith("~"):
+            repo_name = model_path.split("/")[-1].replace("-GGUF", "").replace("-gguf", "").lower()
+            # Try to find a file that contains the repo name
+            res = remote_exec(f"ls -1 ~/mirza-models/ | grep -i '{repo_name}' | head -n 1")
+            if res.get("ok") and res.get("stdout"):
+                model_path = res["stdout"].strip()
+                # Continue below to prepend the path
+
+        # If it's just a filename (no slash and no direct path), assume it's in ~/mirza-models/
+        if "/" not in model_path and not model_path.startswith("/") and not model_path.startswith("~"):
+            model_path = f"~/mirza-models/{model_path}"
+        
         perf = (body or {}).get("perf", {})
         kv_q  = perf.get("kv_q", "q8_0")   # Default: Q8_0 (best for Apple Silicon)
         ctx   = int(perf.get("ctx", 8192))
         fa    = "--flash_attn" if perf.get("flash_attn", True) else ""
+        mlock = "--mlock" if perf.get("mlock", False) else ""
+        warmup = "--warmup" if perf.get("warmup", False) else ""
+        chat_fmt = f"--chat_format {perf.get('chat_format')}" if perf.get("chat_format") else ""
         
-        server_cmd = f"uv run python serve_llama.py --model '{model_path}' --port {API_PORT} --kv_q {kv_q} --ctx {ctx} {fa}"
+        server_cmd = f"uv run python serve_llama.py --model '{model_path}' --port {API_PORT} --kv_q {kv_q} --ctx {ctx} {fa} {mlock} {warmup} {chat_fmt}"
         
         # Kill any previous server first
         remote_exec("pkill -f 'llama_cpp.server' 2>/dev/null || true")
@@ -254,6 +378,8 @@ def handle_api(path, method, body=None):
         cmd = f"cd ~/llmServe && nohup {server_cmd} > /tmp/mirza-llm.log 2>&1 &"
         r = remote_exec(cmd)
         return 200, {"ok": True, "message": "Starting server...", "detail": r}
+
+    # Route deprecated
 
     if path == "/api/llm/deploy" and method == "POST":
         repo     = (body or {}).get("hf_repo", "")
@@ -280,6 +406,90 @@ def handle_api(path, method, body=None):
         cmd = "tail -100 /tmp/mirza-deploy.log 2>/dev/null || echo 'No deployment logs available yet'"
         r = remote_exec(cmd)
         return 200, {"logs": r.get("stdout", "")}
+
+    if path.startswith("/api/llm/suggest") and method == "GET":
+        from urllib.parse import parse_qs, urlparse
+        parsed = urlparse(path)
+        query = ""
+        if "?" in path:
+            path_only, query = path.split("?", 1)
+        else:
+            path_only = path
+
+        qs = parse_qs(query)
+        model_name = qs.get("model", [""])[0]
+        
+        # Get host Hardware info (Dynamic Detection)
+        # - sysctl hw.memsize (Total RAM)
+        # - vm_stat (Free RAM)
+        # - machdep.cpu.brand_string (M1/M2/M3/M4)
+        # - hw.perflevel0.logicalcpu (Performance Cores)
+        cmd = "sysctl -n hw.memsize; vm_stat; sysctl -n machdep.cpu.brand_string; sysctl -n hw.perflevel0.logicalcpu"
+        r_hw = remote_exec(cmd)
+        
+        total_ram_gb = 24.0 
+        free_ram_gb = 16.0
+        chip_brand = "Apple M-series"
+        p_cores = 4
+        batch = 2048
+        ubatch = 512
+        
+        if r_hw.get("ok") and r_hw.get("stdout"):
+            parts = r_hw["stdout"].split("\n")
+            if len(parts) >= 1 and parts[0].isdigit():
+                total_ram_gb = int(parts[0]) / (1024**3)
+            
+            # vm_stat remains complex to parse in one line, but we have the raw stdout
+            stdout = r_hw["stdout"]
+            m_free = re.search(r"Pages free:\s+(\d+)", stdout)
+            m_spec = re.search(r"Pages speculative:\s+(\d+)", stdout)
+            if m_free:
+                free_pages = int(m_free.group(1))
+                if m_spec: free_pages += int(m_spec.group(1))
+                free_ram_gb = (free_pages * 4096) / (1024**3)
+
+            # Chip Brand
+            if len(parts) >= 3:
+                chip_brand = parts[-2].strip() # brand string is usually towards the end
+                if not chip_brand or chip_brand.isdigit(): chip_brand = "Apple M-series"
+                
+            # Performance Cores
+            if len(parts) >= 4 and parts[-1].strip().isdigit():
+                p_cores = int(parts[-1].strip())
+
+            # Specific optimizations based on generations
+            if "M3" in chip_brand or "M4" in chip_brand:
+                batch = 4096
+                ubatch = 1024
+
+        # Estimate model size
+        model_size_gb = 5.0 
+        if model_name:
+            model_path = f"~/mirza-models/{model_name}"
+            r_size = remote_exec(f"ls -l {model_path} | awk '{{print $5}}'")
+            if r_size.get("ok") and r_size.get("stdout") and r_size["stdout"].isdigit():
+                model_size_gb = int(r_size["stdout"]) / (1024**3)
+
+        available_for_kv = max(0.5, free_ram_gb - 2.0)
+        ctx_options = [2048, 4096, 8192, 16384, 32768, 65536, 128000]
+        rec_ctx = 8192
+        for c in ctx_options:
+            if (c / 8192) * 0.15 < available_for_kv:
+                rec_ctx = c
+            else:
+                break
+        
+        result = {
+            "n_ctx": rec_ctx,
+            "n_batch": batch,
+            "n_ubatch": ubatch,
+            "n_threads": p_cores,
+            "mlock": True,
+            "flash_attn": True,
+            "kv_q": "q8_0",
+            "message": f"Optimal pour {chip_brand} ({total_ram_gb:.0f}GB RAM)"
+        }
+        return 200, result
 
     if path == "/api/llm/remove" and method == "POST":
         filename = (body or {}).get("filename", "")
@@ -342,6 +552,33 @@ class MirzaHandler(http.server.SimpleHTTPRequestHandler):
 
     def _handle_api(self, path, method, body=None):
         status, data = handle_api(path, method, body)
+        
+        # Special case for proxied response (from http.client.HTTPResponse)
+        if hasattr(data, 'read'):
+            resp = data
+            self.send_response(status)
+            for k, v in resp.getheaders():
+                if k.lower() not in ["content-length", "transfer-encoding", "access-control-allow-origin"]:
+                    self.send_header(k, v)
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
+            try:
+                # Use a small buffer and flush frequently for smooth streaming
+                while True:
+                    chunk = resp.read(1024) # Smaller chunks for better responsiveness
+                    if not chunk: break
+                    try:
+                        self.wfile.write(chunk)
+                        self.wfile.flush()
+                    except (BrokenPipeError, ConnectionResetError):
+                        # Client disconnected, stop proxying silently
+                        break
+            except Exception as e:
+                print(f"  \033[0;31m[PROXY ERROR]\033[0m {e}")
+            finally:
+                resp.close()
+            return
+
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -356,8 +593,9 @@ class MirzaHandler(http.server.SimpleHTTPRequestHandler):
         self.end_headers()
 
     def log_message(self, format, *args):
-        if "/api/" in str(args[0]):
-            print(f"  \033[0;36m[API]\033[0m {args[0]}")
+        if args and len(args) > 0 and isinstance(args[0], str):
+            ts = datetime.now().strftime("%H:%M:%S")
+            print(f"  \033[2m[{ts}]\033[0m \033[0;36m[API]\033[0m {args[0]}")
         elif not any(ext in str(args[0]) for ext in [".css", ".js", ".png", ".ico", ".woff"]):
             print(f"  \033[2m[GET]\033[0m {args[0]}")
 
@@ -380,9 +618,19 @@ if __name__ == "__main__":
     print("  \033[2mCtrl+C pour arrêter\033[0m")
     print()
 
-    with socketserver.TCPServer(("", PORT), MirzaHandler) as httpd:
-        httpd.allow_reuse_address = True
-        try:
-            httpd.serve_forever()
-        except KeyboardInterrupt:
-            print("\n\033[2m  Arrêt du serveur.\033[0m")
+    class ThreadedTCPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+        allow_reuse_address = True
+
+    try:
+        with ThreadedTCPServer(("", PORT), MirzaHandler) as httpd:
+            try:
+                httpd.serve_forever()
+            except KeyboardInterrupt:
+                print("\n\033[2m  Arrêt du serveur.\033[0m")
+    except OSError as e:
+        if e.errno == 98:
+            print(f"\n  \033[1;31m[ERREUR]\033[0m Le port {PORT} est déjà utilisé.")
+            print(f"  Une autre instance de Mirza WebUI est probablement déjà lancée.")
+            print(f"  Utilisez: \033[1m'lsof -i :{PORT}'\033[0m pour trouver le processus et le tuer.")
+        else:
+            print(f"\n  \033[1;31m[ERREUR]\033[0m Impossible de lancer le serveur: {e}")

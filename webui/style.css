@@ -1485,17 +1485,29 @@ body {
     height: 100%;
     min-width: 0;
     background: var(--color-bg-primary);
+    position: relative;
 }
 
 .view {
-    display: none;
+    display: flex;
     flex-direction: column;
     height: 100%;
+    width: 100%;
     overflow-y: auto;
+    position: absolute;
+    top: 0;
+    left: 0;
+    visibility: hidden;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity var(--transition-base);
 }
 
 .view.active {
-    display: flex;
+    position: relative;
+    visibility: visible;
+    pointer-events: auto;
+    opacity: 1;
 }
 
 .view-header {
@@ -1721,6 +1733,21 @@ body {
 
 .log-output:hover {
     border-color: var(--color-bg-hover);
+}
+
+/* VRAM Monitoring Styles */
+.vram-bar-container div {
+    height: 100%;
+    transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.vram-bar-container div:hover {
+    filter: brightness(1.2) saturate(1.2);
+    cursor: help;
+}
+
+.text-muted {
+    color: var(--color-text-tertiary);
 }
 
 /* ═══════════════════════════════════════════════════════════════

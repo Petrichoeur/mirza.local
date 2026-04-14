@@ -7,18 +7,42 @@ import os
 import sys
 import json
 import subprocess
+import time
 from pathlib import Path
 
 # KV cache type IDs for llama_cpp.server --type_k / --type_v
 KV_QUANT_MAP = {
-    "f16":  "1",   # fp16 — full precision
-    "q8_0": "8",   # 8-bit quantized — good balance
-    "q4_0": "2",   # 4-bit quantized — max savings
-    "bf16": "32",  # bfloat16 (Apple Silicon prefers this)
+    "f16":  "1",   # GGML_TYPE_F16 = 1
+    "q8_0": "8",   # GGML_TYPE_Q8_0 = 8
+    "q4_0": "4",   # GGML_TYPE_Q4_0 = 4
 }
 
 
+def detect_hardware():
+    """Detect Apple Silicon generation and performance cores."""
+    info = {"chip": "M-series", "p_cores": 4, "batch": 2048, "ubatch": 512}
+    try:
+        # Detect chip brand
+        brand = subprocess.check_output(["sysctl", "-n", "machdep.cpu.brand_string"], text=True).strip()
+        info["chip"] = brand
+        
+        # Detect P-cores (logicalcpu for perflevel0 represents performance cores cluster)
+        p_cores = subprocess.check_output(["sysctl", "-n", "hw.perflevel0.logicalcpu"], text=True).strip()
+        if p_cores.isdigit():
+            info["p_cores"] = int(p_cores)
+            
+        # Optimization: M3/M4 have higher memory bandwidth efficiency
+        if "M3" in brand or "M4" in brand:
+            info["batch"] = 4096
+            info["ubatch"] = 1024
+    except:
+        pass
+    return info
+
+
 def main():
+    hw = detect_hardware()
+    
     parser = argparse.ArgumentParser(
         description="Mirza Llama.cpp Python Server",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
@@ -27,19 +51,25 @@ def main():
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind")
     parser.add_argument("--port", type=int, default=8080, help="Port to bind")
     parser.add_argument("--ctx", type=int, default=8192, help="Context size (n_ctx)")
-    parser.add_argument("--n_gpu_layers", type=int, default=99,
+    parser.add_argument("--n_gpu_layers", type=int, default=100,
                         help="Number of layers to offload to GPU (Metal on macOS)")
-    parser.add_argument("--flash_attn", action="store_true",
+    parser.add_argument("--flash_attn", action="store_true", default=True,
                         help="Enable Flash Attention (recommended on Apple Silicon)")
     parser.add_argument("--kv_q", default="q8_0",
                         choices=list(KV_QUANT_MAP.keys()),
                         help="KV cache quantization type")
-    parser.add_argument("--n_batch", type=int, default=512, help="Batch size for prompt processing")
-    parser.add_argument("--n_ubatch", type=int, default=512, help="Micro-batch size")
-    parser.add_argument("--threads", type=int, default=0,
-                        help="CPU threads (0 = auto-detect from performance cores)")
+    parser.add_argument("--n_batch", type=int, default=hw["batch"], 
+                        help=f"Batch size (dynamic for {hw['chip']})")
+    parser.add_argument("--n_ubatch", type=int, default=hw["ubatch"], 
+                        help=f"Micro-batch size (dynamic for {hw['chip']})")
+    parser.add_argument("--threads", type=int, default=hw["p_cores"],
+                        help=f"CPU threads (targeted P-cores: {hw['p_cores']})")
+    parser.add_argument("--mlock", action="store_true", default=True,
+                        help="Force model into RAM (pin to memory)")
+    parser.add_argument("--warmup", action="store_true", help="Warmup shaders on start")
     parser.add_argument("--rope_freq_base", type=float, default=0,
                         help="RoPE base frequency override (0 = model default)")
+    parser.add_argument("--chat_format", help="Chat format to use (e.g., chatml, llama-3)")
 
     args = parser.parse_args()
 
@@ -54,6 +84,12 @@ def main():
     print(f"  KV Cache : {args.kv_q}")
     print(f"  Flash Att: {args.flash_attn}")
     print(f"  GPU layers: {args.n_gpu_layers}")
+    print(f"  Chat Fmt : {args.chat_format or 'auto'}")
+    
+    # Safety: KV quantization (Q8_0, Q4_0) REQUIRES flash_attn on recent llama-cpp versions
+    if args.kv_q != "f16" and not args.flash_attn:
+        print(f"  [Safety] Forcing Flash Attention (required for quantized KV cache)")
+        args.flash_attn = True
 
     cmd = [
         "python", "-m", "llama_cpp.server",
@@ -79,19 +115,96 @@ def main():
     if args.rope_freq_base > 0:
         cmd.extend(["--rope_freq_base", str(args.rope_freq_base)])
 
+    if args.chat_format:
+        cmd.extend(["--chat_format", args.chat_format])
+
+    # Prepare environment
+    env = os.environ.copy()
+    if args.mlock:
+        env["USE_MLOCK"] = "1"
+
     # Log the full command for debugging
     print(f"  Command  : {' '.join(cmd)}")
+    if args.mlock:
+        print(f"  Env      : USE_MLOCK=1")
 
+    # Save state for dashboard monitoring (Atomic write with sync)
     try:
-        subprocess.run(cmd, check=True)
-    except KeyboardInterrupt:
-        print("\n[Mirza] Server stopped.")
-    except subprocess.CalledProcessError as e:
-        print(f"[Mirza] Launch error (code {e.returncode}): {e}", file=sys.stderr)
-        sys.exit(1)
+        import tempfile
+        state_path = os.path.expanduser("~/llmServe/active_model.json")
+        os.makedirs(os.path.dirname(state_path), exist_ok=True)
+        
+        # Write to temporary file first, then sync and rename (Atomic)
+        temp_fd, temp_name = tempfile.mkstemp(dir=os.path.dirname(state_path))
+        try:
+            with os.fdopen(temp_fd, 'w') as f:
+                json.dump({
+                    "repo": args.model,
+                    "file": os.path.basename(model_path),
+                    "path": model_path,
+                    "port": args.port,
+                    "pid": os.getpid(),
+                    "time": time.time()
+                }, f)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_name, state_path)
+        except Exception as e:
+            if os.path.exists(temp_name): os.remove(temp_name)
+            raise e
     except Exception as e:
-        print(f"[Mirza] Unexpected error: {e}", file=sys.stderr)
-        sys.exit(1)
+        print(f"  [Warning] Failed to save active_model.json: {e}")
+
+    if not args.warmup:
+        try:
+            subprocess.run(cmd, check=True, env=env)
+        except KeyboardInterrupt:
+            print("\n[Mirza] Server stopped.")
+        except Exception as e:
+            print(f"[Mirza] Launch error: {e}")
+            sys.exit(1)
+    else:
+        # Warmup logic: Start server, wait, send dummy request, then wait for server
+        import time
+        import urllib.request
+        
+        print(f"[Mirza] Warmup enabled. Starting server in background...")
+        proc = subprocess.Popen(cmd, env=env)
+        
+        # Wait for server to be ready (polled)
+        print(f"  Waiting for API to respond on port {args.port}...")
+        max_retries = 30
+        for i in range(max_retries):
+            try:
+                with urllib.request.urlopen(f"http://{args.host}:{args.port}/v1/models", timeout=1) as response:
+                    if response.status == 200:
+                        break
+            except:
+                time.sleep(1)
+        
+        print(f"  API is up. Sending warmup prompt...")
+        try:
+            warmup_data = json.dumps({
+                "model": os.path.basename(model_path),
+                "prompt": "Hello", 
+                "max_tokens": 1
+            }).encode()
+            req = urllib.request.Request(
+                f"http://{args.host}:{args.port}/v1/completions",
+                data=warmup_data,
+                headers={'Content-Type': 'application/json'}
+            )
+            with urllib.request.urlopen(req, timeout=10) as response:
+                response.read()
+            print(f"  Warmup complete. Metal shaders are ready.")
+        except Exception as e:
+            print(f"  Warmup failed (ignoring): {e}")
+
+        try:
+            proc.wait()
+        except KeyboardInterrupt:
+            print("\n[Mirza] Stopping server...")
+            proc.terminate()
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ const DEFAULT_PROVIDERS = [
     { id: 'anthropic-openai', name: 'Anthropic', type: 'cloud', endpoint: 'https://api.anthropic.com/v1', apiKey: '', model: 'claude-sonnet-4-20250514' },
     { id: 'groq', name: 'Groq', type: 'cloud', endpoint: 'https://api.groq.com/openai', apiKey: '', model: 'llama-3.3-70b-versatile' },
     { id: 'mistral', name: 'Mistral AI', type: 'cloud', endpoint: 'https://api.mistral.ai', apiKey: '', model: 'mistral-small-latest' },
+    { id: 'google', name: 'Google (Gemini)', type: 'cloud', endpoint: 'https://generativelanguage.googleapis.com/v1beta/openai', apiKey: '', model: 'gemini-2.0-flash' },
     { id: 'ollama', name: 'Ollama', type: 'local', endpoint: 'http://localhost:11434', apiKey: '', model: '' },
 ];
 
@@ -38,10 +39,14 @@ const state = {
         ctx: 8192,
         kv_q: 'q8_0',
         flash_attn: true,
-        paged_kv: false
+        mlock: true, 
+        warmup: false,
+        chat_format: ''
     },
     settings: {
         temperature: 0.7,
+        topP: 1.0,
+        repetitionPenalty: 1.1,
         maxTokens: 4096,
         systemPrompt: 'Tu es Mirza, un assistant IA intelligent et serviable. Tu réponds de manière claire, précise et concise en français.',
         mcpEndpoint: '',
@@ -62,8 +67,11 @@ function initDom() {
         'message-input', 'btn-send', 'btn-new-chat',
         'provider-select', 'model-select', 'provider-status-dot',
         'token-counter', 'settings-modal', 'btn-settings', 'btn-close-settings',
-        'setting-temperature', 'temperature-value', 'setting-max-tokens',
-        'setting-system-prompt', 'setting-mcp-endpoint',
+        'setting-temperature', 'temperature-value',
+        'setting-top-p', 'top-p-value',
+        'setting-repetition-penalty', 'repetition-penalty-value',
+        'setting-max-tokens', 'setting-system-prompt',
+        'setting-mcp-endpoint',
         'mcp-tools-list', 'btn-refresh-mcp',
         'btn-clear-history', 'btn-export-conversations', 'btn-add-provider',
         'providers-list', 'link-grafana', 'toast-container',
@@ -71,7 +79,7 @@ function initDom() {
         'dash-server-status', 'dash-host', 'dash-ip', 'dash-api', 'dash-grafana',
         'mcp-search', 'mcp-family', 'mcp-category', 'mcp-ram', 'mcp-sort',
         'modal-inference-options', 'overlay-inference', 'btn-close-inference', 'btn-start-serve',
-        'option-kv-q', 'option-flash-attn', 'option-paged-kv',
+        'option-kv-q', 'option-flash-attn', 'option-mlock', 'option-warmup', 'option-chat-format',
         'global-download-progress', 'download-percent', 'download-progress-bar', 'download-status-text',
         'dash-chip', 'dash-cpu', 'dash-gpu', 'dash-ram',
         'dash-model-name', 'dash-model-sub', 'dash-logs',
@@ -128,6 +136,16 @@ function initDom() {
     dom.dashModelName = document.getElementById('dash-model-name');
     dom.dashModelSub = document.getElementById('dash-model-sub');
     dom.dashLogs = document.getElementById('dash-logs');
+    dom.vramMonitor = document.getElementById('vram-monitor');
+    dom.vramTotalValue = document.getElementById('vram-total-value');
+    dom.vramBarWeights = document.getElementById('vram-bar-weights');
+    dom.vramBarKv = document.getElementById('vram-bar-kv');
+    dom.vramBarCompute = document.getElementById('vram-bar-compute');
+    dom.vramLblWeights = document.getElementById('vram-lbl-weights');
+    dom.vramLblKv = document.getElementById('vram-lbl-kv');
+    dom.vramLblCompute = document.getElementById('vram-lbl-compute');
+    dom.grafanaIframe = document.getElementById('grafana-iframe');
+    dom.dashMetalBadge = document.getElementById('dash-metal-badge');
     dom.btnRefreshLogs = document.getElementById('btn-refresh-logs');
     dom.checkAutoLogs = document.getElementById('check-auto-logs');
     dom.modelsGrid = document.getElementById('models-grid');
@@ -165,7 +183,7 @@ function init() {
     renderProviderSelect();
     renderConversationsList();
     switchView('dashboard');
-    loadDashboard();
+    startGlobalScheduler();
 }
 
 function loadState() {
@@ -177,6 +195,14 @@ function loadState() {
 
     dom.settingTemperature.value = state.settings.temperature;
     dom.temperatureValue.textContent = state.settings.temperature;
+    if (dom.settingTopP) {
+        dom.settingTopP.value = state.settings.topP || 0.95;
+        dom.topPValue.textContent = state.settings.topP || 0.95;
+    }
+    if (dom.settingRepetitionPenalty) {
+        dom.settingRepetitionPenalty.value = state.settings.repetitionPenalty || 1.1;
+        dom.repetitionPenaltyValue.textContent = state.settings.repetitionPenalty || 1.1;
+    }
     dom.settingMaxTokens.value = state.settings.maxTokens;
     dom.settingSystemPrompt.value = state.settings.systemPrompt;
     dom.settingMcpEndpoint.value = state.settings.mcpEndpoint || '';
@@ -240,8 +266,11 @@ function switchView(viewName) {
 
     // Auto-load dashboard data + logs when switching to dashboard
     if (viewName === 'dashboard') {
-        loadDashboard();
-        loadLogs(true);  // silent = true: don't show "loading..." if logs are already visible
+        loadDashboard(); // Debounced call
+    }
+    
+    if (viewName === 'monitoring') {
+        initMonitoring();
     }
 
     dom.sidebar.classList.remove('open');
@@ -317,6 +346,12 @@ function setupEventListeners() {
     });
 
     dom.settingTemperature.addEventListener('input', (e) => dom.temperatureValue.textContent = e.target.value);
+    if (dom.settingTopP) {
+        dom.settingTopP.addEventListener('input', (e) => dom.topPValue.textContent = e.target.value);
+    }
+    if (dom.settingRepetitionPenalty) {
+        dom.settingRepetitionPenalty.addEventListener('input', (e) => dom.repetitionPenaltyValue.textContent = e.target.value);
+    }
     dom.btnAddProvider.addEventListener('click', addCustomProvider);
     dom.btnRefreshMcp.addEventListener('click', refreshMcpTools);
     dom.btnExportConversations.addEventListener('click', exportConversations);
@@ -427,13 +462,18 @@ function setupEventListeners() {
 // Dashboard
 // =================================================================
 async function loadDashboard() {
-    // Prevent duplicate polling loops
-    if (state.dashPollTimer) clearTimeout(state.dashPollTimer);
+    const now = Date.now();
+    // Reduced frequency: 10s debounce for background status checks
+    if (state._isDashFetching || (state._lastDashPoll && now - state._lastDashPoll < 10000)) {
+        return;
+    }
+    state._isDashFetching = true;
+    state._lastDashPoll = now;
 
-    setDashStatus('loading', 'Verifying...');
+    // Timer management removed here, centralized in scheduler
 
     try {
-        const res = await fetch('/api/status', { signal: AbortSignal.timeout(10000) });
+        const res = await fetch('/api/status');
         const data = await res.json();
         state.dashboardData = data;
 
@@ -445,7 +485,6 @@ async function loadDashboard() {
 
         const hostAddr = data.host || 'mirza.local';
         dom.dashHost.textContent = hostAddr;
-        // Don't fallback to host for IP if we just want IP
         const actualIp = data.hardware?.ip && data.hardware.ip !== hostAddr ? data.hardware.ip : (data.hardware?.ip || hostAddr);
         dom.dashIp.dataset.value = actualIp;
         if (!dom.dashIp.classList.contains('obscured-ip')) {
@@ -463,15 +502,12 @@ async function loadDashboard() {
             toast('Configuration manquante, génération automatique en cours...', 'info');
             regenerateConfig().then(() => {
                 window._isGeneratingConfig = false;
-                loadDashboard();
+                triggerDashboardRefresh();
             });
         }
 
         if (window._isGeneratingConfig) {
             dom.dashChip.textContent = 'Génération...';
-            dom.dashCpu.textContent = '...';
-            dom.dashGpu.textContent = '...';
-            dom.dashRam.textContent = '...';
         } else {
             dom.dashChip.textContent = data.hardware?.chip || '—';
             dom.dashCpu.textContent = data.hardware?.cpu_cores ? `${data.hardware.cpu_cores} cores` : '—';
@@ -480,22 +516,60 @@ async function loadDashboard() {
         }
 
         if (data.active_model) {
-            const short = data.active_model.split('/').pop();
-            dom.dashModelName.textContent = short;
+            dom.dashModelName.textContent = data.active_model.split('/').pop();
             dom.dashModelSub.textContent = data.active_model;
+            
+            // Handle VRAM Monitoring & Metal Status
+            if (data.vram_metrics && dom.vramMonitor) {
+                dom.vramMonitor.style.display = 'block';
+                if (dom.dashMetalBadge) {
+                    dom.dashMetalBadge.style.display = data.vram_metrics.metal_active ? 'block' : 'none';
+                }
+                const m = data.vram_metrics;
+                const totalInUseMb = m.weights + m.kv + m.compute;
+                const totalInUseGb = (totalInUseMb / 1024).toFixed(1);
+                const totalSysRamGb = parseFloat(data.hardware?.ram_gb) || 24.0;
+                const totalSysRamMb = totalSysRamGb * 1024;
+                
+                dom.vramTotalValue.textContent = `${totalInUseGb} GB / ${totalSysRamGb} GB`;
+                
+                // Calculate percentages for the progress bar segments relative to TOTAL RAM
+                const weightP = (m.weights / totalSysRamMb * 100).toFixed(1) + '%';
+                const kvP = (m.kv / totalSysRamMb * 100).toFixed(1) + '%';
+                const computeP = (m.compute / totalSysRamMb * 100).toFixed(1) + '%';
+                
+                dom.vramBarWeights.style.width = weightP;
+                dom.vramBarKv.style.width = kvP;
+                dom.vramBarCompute.style.width = computeP;
+                
+                // Add titles for tooltips & update legend labels
+                const wGb = (m.weights/1024).toFixed(2);
+                const kGb = (m.kv/1024).toFixed(2);
+                const cGb = (m.compute/1024).toFixed(2);
+
+                dom.vramBarWeights.title = `Weights: ${wGb} GB`;
+                dom.vramBarKv.title = `KV Cache: ${kGb} GB`;
+                dom.vramBarCompute.title = `Compute: ${cGb} GB`;
+
+                if (dom.vramLblWeights) dom.vramLblWeights.textContent = `Weights: ${wGb} GB`;
+                if (dom.vramLblKv) dom.vramLblKv.textContent = `KV Cache: ${kGb} GB`;
+                if (dom.vramLblCompute) dom.vramLblCompute.textContent = `Compute: ${cGb} GB`;
+            } else if (dom.vramMonitor) {
+                dom.vramMonitor.style.display = 'none';
+            }
         } else {
             dom.dashModelName.textContent = 'None';
             dom.dashModelSub.textContent = data.llm_api ? 'No model loaded' : 'Server Stopped';
+            if (dom.vramMonitor) dom.vramMonitor.style.display = 'none';
+            if (dom.dashMetalBadge) dom.dashMetalBadge.style.display = 'none';
         }
 
-        // Show/Hide Download Activity section
         if (state.isDownloading && dom.dashSectionDownload) {
             dom.dashSectionDownload.style.display = 'block';
         } else if (dom.dashSectionDownload) {
             dom.dashSectionDownload.style.display = 'none';
         }
 
-        // Update Grafana iframe (always use mirza.local for reliable access)
         const grafanaUrl = `http://${data.host || 'mirza.local'}:3000/d/f09f8d8e-mirza-monitor-lite/mirza-monitor-lite?kiosk`;
         const iframe = document.getElementById('grafana-iframe');
         if (iframe && iframe.src !== grafanaUrl && iframe.src !== grafanaUrl + '/') {
@@ -504,11 +578,31 @@ async function loadDashboard() {
 
     } catch (e) {
         setDashStatus('offline', 'Connection Error');
-        console.error('Dashboard error:', e);
+        console.warn('Dashboard error:', e);
+    } finally {
+        state._isDashFetching = false;
     }
+}
 
-    // Schedule next poll (loop only if we are still on dashboard or need background status)
-    state.dashPollTimer = setTimeout(loadDashboard, 3000);
+/**
+ * Centralized Scheduler (60s interval)
+ * Ensures only one loop runs and handles both status and logs.
+ */
+function startGlobalScheduler() {
+    if (state._schedulerId) clearInterval(state._schedulerId);
+    state._schedulerId = setInterval(() => {
+        if (state.currentView === 'dashboard') {
+            loadDashboard();
+            if (dom.checkAutoLogs && dom.checkAutoLogs.checked) {
+                loadLogs(true);
+            }
+        }
+    }, 60000);
+}
+
+function triggerDashboardRefresh(delay = 0) {
+    if (delay === 0) loadDashboard();
+    else setTimeout(loadDashboard, delay);
 }
 
 function setDashStatus(status, text) {
@@ -598,7 +692,7 @@ async function apiAction(endpoint, message, extraBody = null) {
         } else {
             toast(data.error || 'Erreur', 'error');
         }
-        setTimeout(loadDashboard, 3000);
+        triggerDashboardRefresh(60000);
     } catch (e) {
         toast(`Erreur: ${e.message}`, 'error');
     }
@@ -854,9 +948,10 @@ async function loadModelsCatalog() {
                 }
             }
         }
+        const mergedModels = Array.from(seen.values());
         // ── Filter noise ───────────────────────────────────────────────────
         const blacklist = ['test', 'moved', 'stories', 'dummy', 'tmp', 'training', 'junk', 'vocabs', 'wavtokenizer', 'ltx-'];
-        const filteredModels = hfModels.filter(m => {
+        const filteredModels = mergedModels.filter(m => {
             const n = (m.id.split('/')[1] || '').toLowerCase();
             return !blacklist.some(b => n.includes(b));
         });
@@ -1151,11 +1246,18 @@ function populateFilters(data) {
  * filenames found in state.installedModels (e.g. model-q4_k_m.gguf).
  */
 function isModelInstalled(repoId, bestFile) {
+    return getInstalledFilename(repoId, bestFile) !== null;
+}
+
+/**
+ * Returns the actual filename if the model is installed, otherwise null.
+ */
+function getInstalledFilename(repoId, bestFile) {
     const installed = state.installedModels || [];
-    const idLower = repoId.toLowerCase();
+    const idLower = (repoId || '').toLowerCase();
     const repoName = idLower.split('/').pop().replace(/-gguf$/i, '');
 
-    return installed.some(filename => {
+    const match = installed.find(filename => {
         const f = filename.toLowerCase();
         // Exact match via known best_file
         if (bestFile && f === bestFile.toLowerCase()) return true;
@@ -1163,6 +1265,7 @@ function isModelInstalled(repoId, bestFile) {
         if (f.includes(repoName)) return true;
         return false;
     });
+    return match || null;
 }
 
 function renderFilteredModels() {
@@ -1294,7 +1397,10 @@ function renderFilteredModels() {
     dom.modelsGrid.innerHTML = '';
 
     models.forEach(m => {
-        let isInstalled = m.isOrphan || isModelInstalled(m.hf_repo, m.best_file);
+        let installedFile = getInstalledFilename(m.hf_repo, m.best_file);
+        let isInstalled = m.isOrphan || !!installedFile;
+        let serveArg = installedFile || m.hf_repo;
+
         let isRecommended = m.recommended || false;
         let isUnsupported = false;
         let warningText = '';
@@ -1377,7 +1483,7 @@ function renderFilteredModels() {
                     : `<button class="model-btn model-btn-deploy" disabled style="opacity:0.5;">✓ Installed</button>`)
             }
                     ${!caps.embedding
-                ? `<button class="model-btn model-btn-serve" ${isUnsupported ? 'disabled' : ''} onclick="serveModel('${escapeHtml(m.hf_repo)}')">▶ Serve</button>`
+                ? `<button class="model-btn model-btn-serve" ${isUnsupported ? 'disabled' : ''} onclick="serveModel('${escapeHtml(serveArg)}')">▶ Serve</button>`
                 : ''
             }
                 </div>
@@ -1495,6 +1601,36 @@ async function serveModel(hfRepo) {
     // Show Options Modal instead of starting immediately
     state.selectedInferenceModel = hfRepo;
     dom['overlay_inference'].classList.add('visible');
+    
+    // Call hardware suggest endpoint
+    try {
+        const modelName = hfRepo.split('/').pop();
+        const res = await fetch(`/api/llm/suggest?model=${encodeURIComponent(modelName)}`);
+        if (res.ok) {
+            const advice = await res.json();
+            console.log("Hardware Suggestion:", advice);
+            
+            // Apply suggestions to UI state
+            state.inferenceConfig.ctx = advice.n_ctx;
+            state.inferenceConfig.kv_q = advice.kv_q;
+            
+            // Update UI elements (chips)
+            const chips = document.querySelectorAll('.ctx-chip');
+            chips.forEach(chip => {
+                if (parseInt(chip.dataset.val) === advice.n_ctx) {
+                    chip.classList.add('active');
+                } else {
+                    chip.classList.remove('active');
+                }
+            });
+            
+            if (dom['option_kv_q']) dom['option_kv_q'].value = advice.kv_q;
+            
+            toast(advice.message || "Calcul des paramètres optimaux fini", "info");
+        }
+    } catch (e) {
+        console.warn("Could not get hardware suggestions:", e);
+    }
 }
 
 async function startServeWithConfig() {
@@ -1516,7 +1652,7 @@ async function startServeWithConfig() {
 
         if (data.ok) {
             // Update UI to show starting status
-            setTimeout(loadDashboard, 2000);
+            triggerDashboardRefresh(5000); // Success response, slightly faster refresh once
         }
     } catch (e) {
         toast(`Error: ${e.message}`, 'error');
@@ -1527,11 +1663,7 @@ window.deployModel = deployModel;
 window.serveModel = serveModel;
 
 // Auto-refresh logs interval
-setInterval(() => {
-    if (dom.checkAutoLogs && dom.checkAutoLogs.checked && state.view === 'dashboard') {
-        loadLogs(true);
-    }
-}, 3000);
+// Redundant interval removed, unified in startGlobalScheduler
 
 // =================================================================
 // Error Handling
@@ -1583,21 +1715,74 @@ function renderConfig(config) {
         Object.entries(entries).forEach(([key, val]) => {
             let valClass = 'config-val';
             let displayVal = escapeHtml(val);
+            let isSensitive = (key === 'ip' || key === 'mac_address');
+
             if (val === 'true' || val === 'running') {
                 valClass += ' config-val-ok';
             } else if (val === 'false' || val === 'stopped' || val === 'N/A' || val === 'none') {
                 valClass += ' config-val-off';
             }
-            rows += `<div class="config-row">
-                <span class="config-key">${escapeHtml(key)}</span>
-                <span class="${valClass}">${displayVal}</span>
-            </div>`;
+
+            if (isSensitive) {
+                rows += `<div class="config-row">
+                    <span class="config-key">${escapeHtml(key)}</span>
+                    <span class="${valClass}" style="display: flex; align-items: center; gap: 8px;">
+                        <span class="cfg-sensitive-val" data-real="${escapeHtml(val)}">••••••••••••</span>
+                        <button class="btn-icon btn-icon-sm cfg-toggle-btn" title="Show/Hide" style="margin: 0; padding: 2px;">
+                            <svg class="eye-closed" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.93A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22"/></svg>
+                            <svg class="eye-open" style="display:none;" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                        </button>
+                    </span>
+                </div>`;
+            } else {
+                rows += `<div class="config-row">
+                    <span class="config-key">${escapeHtml(key)}</span>
+                    <span class="${valClass}">${displayVal}</span>
+                </div>`;
+            }
         });
         el.innerHTML = `<div class="config-section-header"><span>${meta.icon}</span> ${meta.label}</div><div class="config-rows">${rows}</div>`;
         dom.configContainer.appendChild(el);
     });
+
+    // Attach listeners to new toggle buttons
+    dom.configContainer.querySelectorAll('.cfg-toggle-btn').forEach(btn => {
+        btn.onclick = () => {
+            const container = btn.parentElement;
+            const textEl = container.querySelector('.cfg-sensitive-val');
+            const isVisible = textEl.textContent !== '••••••••••••';
+            
+            if (isVisible) {
+                textEl.textContent = '••••••••••••';
+                btn.querySelector('.eye-closed').style.display = 'block';
+                btn.querySelector('.eye-open').style.display = 'none';
+            } else {
+                textEl.textContent = textEl.dataset.real;
+                btn.querySelector('.eye-closed').style.display = 'none';
+                btn.querySelector('.eye-open').style.display = 'block';
+            }
+        };
+    });
 }
 
+async function initMonitoring() {
+    if (!dom.grafanaIframe) return;
+    
+    // Check if we already have a specialized URL
+    if (state._monUrlLoaded) return;
+    
+    try {
+        const res = await fetch('/api/llm/monitoring');
+        const data = await res.json();
+        if (data.ok && data.url) {
+            console.log("Monitoring Auto-Discovery:", data.url);
+            dom.grafanaIframe.src = data.url;
+            state._monUrlLoaded = true;
+        }
+    } catch (e) {
+        console.warn("Failed to discover monitoring URL:", e);
+    }
+}
 async function regenerateConfig() {
     toast('Régénération de la config via SSH...', 'info');
     dom.btnRefreshConfig.disabled = true;
@@ -1693,6 +1878,8 @@ window.deleteProvider = deleteProvider;
 
 function saveSettings() {
     state.settings.temperature = parseFloat(dom.settingTemperature.value);
+    if (dom.settingTopP) state.settings.topP = parseFloat(dom.settingTopP.value);
+    if (dom.settingRepetitionPenalty) state.settings.repetitionPenalty = parseFloat(dom.settingRepetitionPenalty.value);
     state.settings.maxTokens = parseInt(dom.settingMaxTokens.value);
     state.settings.systemPrompt = dom.settingSystemPrompt.value;
     state.settings.mcpEndpoint = dom.settingMcpEndpoint.value.replace(/\/+$/, '');
@@ -1705,6 +1892,12 @@ function saveSettings() {
 // Provider Status (Chat sidebar)
 // =================================================================
 async function checkProviderStatus() {
+    const now = Date.now();
+    // Reduced frequency: 15s debounce for sidebar status
+    if (state._isStatusChecking || (state._lastStatusCheck && now - state._lastStatusCheck < 15000)) return;
+    state._isStatusChecking = true;
+    state._lastStatusCheck = now;
+
     dom.providerStatusDot.className = 'status-dot loading';
     const provider = getActiveProvider();
     const headers = {};
@@ -1730,6 +1923,8 @@ async function checkProviderStatus() {
     } catch {
         dom.providerStatusDot.className = 'status-dot offline';
         dom.modelSelect.innerHTML = provider.model ? `<option value="${escapeHtml(provider.model)}">${escapeHtml(provider.model)} (hors ligne)</option>` : '<option>Hors ligne</option>';
+    } finally {
+        state._isStatusChecking = false;
     }
 }
 
@@ -1862,6 +2057,29 @@ function createStreamingMessage() {
     return el;
 }
 
+function getStopTokens(format, modelName = "") {
+    let f = format;
+    const name = (modelName || "").toLowerCase();
+
+    // Auto-detection based on model filename if not explicitly set
+    if (!f || f === 'auto') {
+        if (name.includes('qwen') || name.includes('yi') || name.includes('deepseek')) f = 'chatml';
+        else if (name.includes('llama-3')) f = 'llama-3';
+        else if (name.includes('mistral') || name.includes('mixtral')) f = 'mistral-instruct';
+        else if (name.includes('gemma')) f = 'gemma';
+        else if (name.includes('llama-2')) f = 'llama-2';
+    }
+
+    if (f === 'chatml') return ["<|im_end|>", "<|im_start|>", "<|endoftext|>", "Assistant:", "User:"];
+    if (f === 'llama-3') return ["<|eot_id|>", "<|start_header_id|>"];
+    if (f === 'mistral-instruct') return ["</s>", "[INST]", "[/INST]"];
+    if (f === 'llama-2') return ["[/INST]", "</s>"];
+    if (f === 'gemma') return ["<end_of_turn>", "<start_of_turn>"];
+    
+    // Safety net: common end tokens
+    return ["<|im_end|>", "</s>", "<|eot_id|>"];
+}
+
 function updateStreamingMessage(el, content) {
     el.querySelector('.message-content').innerHTML = renderMarkdown(content) + '<span class="streaming-cursor"></span>';
     enhanceCodeBlocks(el); scrollToBottom();
@@ -1902,7 +2120,19 @@ async function sendMessage() {
         const hdrs = { 'Content-Type': 'application/json' };
         if (provider.apiKey) hdrs['Authorization'] = `Bearer ${provider.apiKey}`;
 
-        const body = { model: dom.modelSelect.value || provider.model || 'default', messages: msgs, max_tokens: state.settings.maxTokens, temperature: state.settings.temperature, stream: true };
+        const modelName = dom.modelSelect.value || provider.model || 'default';
+        const stopTokens = getStopTokens(state.inferenceConfig.chat_format, modelName);
+        
+        const body = { 
+            model: modelName, 
+            messages: msgs, 
+            max_tokens: state.settings.maxTokens, 
+            temperature: state.settings.temperature,
+            top_p: state.settings.topP ?? 1.0,
+            repeat_penalty: state.settings.repetitionPenalty ?? 1.0,
+            stop: stopTokens,
+            stream: true 
+        };
 
         const enabledTools = state.settings.mcpTools.filter(t => state.settings.mcpEnabled[t.name] !== false);
         if (state.settings.mcpEndpoint && enabledTools.length) {
@@ -2025,13 +2255,33 @@ function bindInferenceEvents() {
 
     // Toggles
     if (dom['option_kv_q']) {
-        dom['option_kv_q'].onchange = (e) => state.inferenceConfig.kv_q = e.target.value;
+        dom['option_kv_q'].onchange = (e) => {
+            const val = e.target.value;
+            state.inferenceConfig.kv_q = val;
+            
+            // Safety dependency: Quantized KV requires Flash Attention
+            if (val !== 'f16' && dom['option_flash_attn']) {
+                dom['option_flash_attn'].checked = true;
+                dom['option_flash_attn'].disabled = true;
+                dom['option_flash_attn'].title = "Requis pour le cache KV quantisé";
+                state.inferenceConfig.flash_attn = true;
+            } else if (dom['option_flash_attn']) {
+                dom['option_flash_attn'].disabled = false;
+                dom['option_flash_attn'].title = "";
+            }
+        };
     }
     if (dom['option_flash_attn']) {
         dom['option_flash_attn'].onchange = (e) => state.inferenceConfig.flash_attn = e.target.checked;
     }
-    if (dom['option_paged_kv']) {
-        dom['option_paged_kv'].onchange = (e) => state.inferenceConfig.paged_kv = e.target.checked;
+    if (dom['option_mlock']) {
+        dom['option_mlock'].onchange = (e) => state.inferenceConfig.mlock = e.target.checked;
+    }
+    if (dom['option_warmup']) {
+        dom['option_warmup'].onchange = (e) => state.inferenceConfig.warmup = e.target.checked;
+    }
+    if (dom['option_chat_format']) {
+        dom['option_chat_format'].onchange = (e) => state.inferenceConfig.chat_format = e.target.value;
     }
 
     if (dom['btn_start_serve']) {

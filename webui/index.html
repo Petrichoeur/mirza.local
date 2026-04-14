@@ -165,8 +165,29 @@
                         <h3>Active Model</h3>
                     </div>
                     <div class="dash-card-body">
-                        <div class="dash-model-name" id="dash-model-name">None</div>
+                        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
+                            <div class="dash-model-name" id="dash-model-name">None</div>
+                            <div id="dash-metal-badge" style="display: none; font-size: 0.65rem; padding: 2px 6px; background: rgba(52, 211, 153, 0.1); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.2); border-radius: 4px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px;">Metal</div>
+                        </div>
                         <div class="dash-model-sub" id="dash-model-sub">Server Stopped</div>
+                        
+                        <!-- VRAM Monitoring Breakdown -->
+                        <div id="vram-monitor" style="display:none; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px;">
+                            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 6px; color: var(--text-muted);">
+                                <span>VRAM Allocation</span>
+                                <span id="vram-total-value">0.0 GB</span>
+                            </div>
+                            <div class="vram-bar-container" style="height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; display: flex; overflow: hidden; margin-bottom: 8px;">
+                                <div id="vram-bar-weights" style="width: 0%; background: var(--color-primary); transition: width 0.3s;"></div>
+                                <div id="vram-bar-kv" style="width: 0%; background: #fbbf24; transition: width 0.3s;"></div>
+                                <div id="vram-bar-compute" style="width: 0%; background: #a78bfa; transition: width 0.3s;"></div>
+                            </div>
+                            <div style="display: flex; gap: 12px; font-size: 0.65rem; color: var(--text-muted);">
+                                <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; background: var(--color-primary); border-radius: 2px;"></div> <span id="vram-lbl-weights">Weights</span></div>
+                                <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; background: #fbbf24; border-radius: 2px;"></div> <span id="vram-lbl-kv">KV Cache</span></div>
+                                <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; background: #a78bfa; border-radius: 2px;"></div> <span id="vram-lbl-compute">Compute</span></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -432,7 +453,7 @@
                 </button>
             </div>
             <div style="flex: 1; border-radius: var(--radius-lg); overflow: hidden; background: var(--color-bg-secondary); border: 1px solid var(--color-border); height: calc(100vh - 120px);">
-                <iframe id="grafana-iframe" src="http://mirza.local:3000/d/ad5vxgh/mirza-monitor-lite?kiosk" style="width: 100%; height: 100%; border: none;"></iframe>
+                <iframe id="grafana-iframe" src="" style="width: 100%; height: 100%; border: none;"></iframe>
             </div>
         </div>
 
@@ -518,10 +539,24 @@
                 </div>
                 <div class="tab-content" id="tab-generation">
                     <div class="setting-group">
-                        <label for="setting-temperature">Temperature</label>
+                        <label for="setting-temperature">Température</label>
                         <div class="setting-range-row">
                             <input type="range" id="setting-temperature" min="0" max="2" step="0.1" value="0.7" />
                             <span id="temperature-value">0.7</span>
+                        </div>
+                    </div>
+                    <div class="setting-group">
+                        <label for="setting-top-p">Top-P (Nucleus)</label>
+                        <div class="setting-range-row">
+                            <input type="range" id="setting-top-p" min="0" max="1" step="0.01" value="0.95" />
+                            <span id="top-p-value">0.95</span>
+                        </div>
+                    </div>
+                    <div class="setting-group">
+                        <label for="setting-repetition-penalty">Pénalité de Répétition</label>
+                        <div class="setting-range-row">
+                            <input type="range" id="setting-repetition-penalty" min="1" max="2" step="0.05" value="1.1" />
+                            <span id="repetition-penalty-value">1.1</span>
                         </div>
                     </div>
                     <div class="setting-group">
@@ -585,11 +620,32 @@
                     </div>
 
                     <div class="field-group">
-                        <label style="display: block; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem;">Attention Optimizations</label>
+                        <label style="display: block; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem;">Chat Template</label>
+                        <select id="option-chat-format" class="select-filter" style="width: 100%;">
+                            <option value="">Auto-detect (recommandé)</option>
+                            <option value="chatml">ChatML (Qwen, Yi, DeepSeek)</option>
+                            <option value="llama-3">Llama 3</option>
+                            <option value="llama-2">Llama 2 / Mistral v0.1</option>
+                            <option value="mistral-instruct">Mistral Instruct (v0.2+)</option>
+                            <option value="gemma">Gemma 2</option>
+                        </select>
+                        <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 5px;">Indispensable si le modèle boucle ou répète ses instructions.</p>
+                    </div>
+
+                    <div class="field-group">
+                        <label style="display: block; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem;">Hardware & Attention</label>
                         <div style="display: flex; flex-direction: column; gap: 0.75rem;">
                             <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
                                 <span>Flash Attention</span>
                                 <input type="checkbox" id="option-flash-attn" checked style="width: 18px; height: 18px; accent-color: var(--color-primary);">
+                            </label>
+                            <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" title="Pins model to RAM to prevent swapping">
+                                <span>Memory Locking (MLOCK)</span>
+                                <input type="checkbox" id="option-mlock" checked style="width: 18px; height: 18px; accent-color: var(--color-primary);">
+                            </label>
+                            <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" title="Compiles shaders immediately on launch">
+                                <span>Warmup Shaders</span>
+                                <input type="checkbox" id="option-warmup" style="width: 18px; height: 18px; accent-color: var(--color-primary);">
                             </label>
                             <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
                                 <span>Paged Attention (vLLM style)</span>
