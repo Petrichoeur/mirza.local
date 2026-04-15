@@ -538,7 +538,7 @@ mirza stop-ui
 
 1. Confirm the Mac is on and Ethernet-connected
 2. Check your router for IGMP Snooping — disable it
-3. Fallback: use the Mac's static IP directly (e.g., `export MIRZA_HOST=192.168.1.87`)
+3. Fallback: use the Mac's static IP directly (e.g., `export MIRZA_HOST=192.X.X.X`)
 
 ### Inference server doesn't start
 
@@ -566,7 +566,7 @@ Check Grafana for memory pressure. If RAM usage exceeds 90%, the model is too la
 
 | Variable | Description | Set by |
 |----------|-------------|--------|
-| `MIRZA_HOST` | Mac hostname or IP (`mirza.local` or `192.168.1.87`) | `gatcha.sh` / manual |
+| `MIRZA_HOST` | Mac hostname or IP (`mirza.local` or `192.168.X.X`) | `gatcha.sh` / manual |
 | `MIRZA_USER` | SSH username on the Mac | `gatcha.sh` / manual |
 | `MIRZA_MAC_ADRESS` | Ethernet MAC address (for Wake-on-LAN) | `gatcha.sh` / manual |
 | `MIRZA_API_PORT` | LLM inference API port (default: `8080`) | Optional override |
@@ -681,13 +681,33 @@ Maybe the next great model will carry a woman's name too. Until then, Mirza keep
 - [x] Rich capability badges: MoE, Vision, Audio, Embedding, Tools, Long Context
 - [x] Advanced inference configuration: n_ctx, KV cache quantization, Flash Attention
 - [x] Real-time download progress bar
-- [x] HuggingFace token support for gated models
+- [ ] HuggingFace token support for gated models
 - [x] Model deletion from CLI and WebUI
 - [x] Auto-kill previous server on new serve request
 - [ ] MCP server integration for agentic workflows (filesystem, web search, code execution)
 - [ ] Multi-model serving (multiple models on different ports simultaneously)
 - [ ] Model benchmarking harness across chip variants (M1 → M4 Ultra)
 - [ ] TurboQuant integration for post-hoc quantization
+- [ ] Mirza Station available on Linux with Vulkan (AMD) and CUDA (NVIDIA) inference 
+    - [ ] AMD Support for Linux
+    - [ ] NVIDIA Support for Linux 
+- [ ] LLM-JEPA custom integration ( https://arxiv.org/abs/2509.14252 ) 
+    - [ ] Deployment of LLM-JEPA simple architecture 
+    - [ ] Deployment of LLM-JEPA with SIGReg ( https://arxiv.org/abs/2511.08544 ) 
+    - [ ] Special Recipe with RAG - either this is a great idea, or I'm being an idiot. Nevertheless, need help on this one. 
+- [ ] Docker integration for launching AI STUDIO and remote server. 
+    - [ ] Docker image for mirza ui 
+    - [ ] Docker image for LLmServe
+    - [ ] Docker Compose for launching both
+    - [ ] Kubernetes deployment for Mirza ( Helm is the way)
+
+- [ ] Kubernetes integraton with dynamic GPU provisionning for serving. ( Maybe a vLLM custom image for this one ) 
+    - [ ] I don't know yet 
+    - [ ] I'm sure a lot of coffee will be needed 
+    - [ ] My Girlfriend will start to do sanity check on me i think 
+    - [ ] If i do this one alone i will need emotionnal support from GOD.
+- [ ] Testing all this stuff. Cuz' CI/CD is the way. So really the test will be listed on the go: 
+    - [X] First test : I'm alive, the stuff work on my Machine.
 - [ ] Conversation export (Markdown, JSON)
 
 ---
