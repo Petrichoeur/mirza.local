@@ -136,16 +136,75 @@ if [[ "$deploy_resp" =~ ^([yY][eE][sS]|[yY]|[oO][uU][iI]|[oO])$ ]] || [[ -z "$de
 
     if [ -n "$TARGET_USER" ] && [ -n "$TARGET_HOST" ]; then
         echo -e "\n --- PUSHING FILES ---"
+        echo -e " ${CYAN}Syncing to ${TARGET_USER}@${TARGET_HOST}...${NC}"
+        
+        # Use rsync with exclusions for local-only files/dirs
         if command -v rsync >/dev/null 2>&1; then
-            echo -e " ${CYAN}Syncing (rsync) to ${TARGET_USER}@${TARGET_HOST}...${NC}"
-            rsync -avz "$SCRIPT_DIR/mirzaServer/" "${TARGET_USER}@${TARGET_HOST}:~/mirzaServer/"
-            rsync -avz "$SCRIPT_DIR/llmServe/" "${TARGET_USER}@${TARGET_HOST}:~/llmServe/"
-            echo -e " ${GREEN}[+] Files (Server & LLM backend) synced successfully!${NC}"
+            # First sync llmServe (includes serve_llama.py with optimizations)
+            echo -e " ${YELLOW}Syncing llmServe/ ...${NC}"
+            rsync -avz --delete \
+                --exclude='.venv' \
+                --exclude='__pycache__' \
+                --exclude='*.pyc' \
+                --exclude='.git' \
+                "$SCRIPT_DIR/llmServe/" \
+                "${TARGET_USER}@${TARGET_HOST}:~/llmServe/"
+            
+            # Then sync mirzaServer
+            echo -e " ${YELLOW}Syncing mirzaServer/ ...${NC}"
+            rsync -avz --delete \
+                --exclude='.venv' \
+                --exclude='__pycache__' \
+                --exclude='*.pyc' \
+                --exclude='.git' \
+                "$SCRIPT_DIR/mirzaServer/" \
+                "${TARGET_USER}@${TARGET_HOST}:~/mirzaServer/"
+            
+            echo -e " ${GREEN}[+] Files synced successfully!${NC}"
         else
-            echo -e " ${CYAN}Copying (scp) to ${TARGET_USER}@${TARGET_HOST}:~/...${NC}"
+            # Fallback to scp with exclusions - use file list
+            echo -e " ${YELLOW}Using scp as fallback...${NC}"
+            
+            # Copy only Python files (not .venv)
+            find "$SCRIPT_DIR/llmServe" -maxdepth 1 -name "*.py" -exec scp {} "${TARGET_USER}@${TARGET_HOST}:~/llmServe/" \;
+            find "$SCRIPT_DIR/llmServe" -maxdepth 1 -name "*.toml" -exec scp {} "${TARGET_USER}@${TARGET_HOST}:~/llmServe/" \;
+            find "$SCRIPT_DIR/llmServe" -maxdepth 1 -name "*.txt" -exec scp {} "${TARGET_USER}@${TARGET_HOST}:~/llmServe/" \;
+            
+            # Copy mirzaServer directory
             scp -r "$SCRIPT_DIR/mirzaServer" "${TARGET_USER}@${TARGET_HOST}:~/"
-            scp -r "$SCRIPT_DIR/llmServe" "${TARGET_USER}@${TARGET_HOST}:~/"
             echo -e " ${GREEN}[+] Files copied successfully!${NC}"
+        fi
+
+        # Clean .venv on remote and reinstall for clean state
+        echo -e "\n --- CLEANING REMOTE ENVIRONMENT ---"
+        echo -e " ${YELLOW}Removing remote .venv and reinstalling...${NC}"
+        ssh "${TARGET_USER}@${TARGET_HOST}" "rm -rf ~/llmServe/.venv && cd ~/llmServe && uv sync"
+        echo -e " ${GREEN}[+] Environment reinstalled successfully!${NC}"
+
+        # Verify sync - check that remote matches local
+        echo -e "\n --- VERIFYING SYNC ---"
+        
+        echo -e " ${YELLOW}Checking serve_llama.py...${NC}"
+        LOCAL_HASH=$(md5sum "$SCRIPT_DIR/llmServe/serve_llama.py" 2>/dev/null | cut -d' ' -f1)
+        REMOTE_HASH=$(ssh "${TARGET_USER}@${TARGET_HOST}" "md5sum ~/llmServe/serve_llama.py 2>/dev/null | cut -d' ' -f1")
+        
+        if [ "$LOCAL_HASH" = "$REMOTE_HASH" ]; then
+            echo -e " ${GREEN}[+] serve_llama.py verified (MD5 match)${NC}"
+        else
+            echo -e "${RED}[!] serve_llama.py mismatch!${NC}"
+            echo -e "   Local MD5:  $LOCAL_HASH"
+            echo -e "   Remote MD5: $REMOTE_HASH"
+        fi
+
+        # Show key file stats
+        LOCAL_LINES=$(wc -l < "$SCRIPT_DIR/llmServe/serve_llama.py" | tr -d ' ')
+        REMOTE_LINES=$(ssh "${TARGET_USER}@${TARGET_HOST}" "wc -l < ~/llmServe/serve_llama.py" | tr -d ' ')
+        echo -e " Local lines:  $LOCAL_LINES"
+        echo -e " Remote lines: $REMOTE_LINES"
+        
+        if [ "$LOCAL_LINES" != "$REMOTE_LINES" ]; then
+            echo -e "${RED}[!] File count mismatch!${NC}"
+            echo -e "${YELLOW}[!] Please check the sync and try again.${NC}"
         fi
 
         echo -e "\n --- SETTING UP MONITORING (Grafana / Prometheus) ---"

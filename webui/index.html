@@ -58,12 +58,11 @@
 
         <!-- Chat: conversations list -->
         <div class="sidebar-conversations" id="sidebar-conversations" style="display:none;">
-            <div class="sidebar-section-label">
-                Conversations
-                <button class="btn-icon btn-icon-sm" id="btn-new-chat" title="New conversation">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-                </button>
-            </div>
+            <button class="btn-new-conversation" id="btn-new-chat">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                Nouvelle conversation
+            </button>
+            <div class="sidebar-section-label">Conversations</div>
             <div id="conversations-list" class="conversations-list"></div>
         </div>
 
@@ -187,6 +186,14 @@
                                 <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; background: #fbbf24; border-radius: 2px;"></div> <span id="vram-lbl-kv">KV Cache</span></div>
                                 <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; background: #a78bfa; border-radius: 2px;"></div> <span id="vram-lbl-compute">Compute</span></div>
                             </div>
+                            <div id="vram-os-ram" style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--text-muted); margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.05);">
+                                <span>Total RAM Used</span>
+                                <span id="vram-total-ram-value">—</span>
+                            </div>
+                            <div id="vram-os-ram-sys" style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--text-muted); margin-top: 4px;">
+                                <span>OS RAM Used</span>
+                                <span id="vram-os-ram-sys-value">—</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -286,10 +293,19 @@
                     <textarea id="message-input" class="message-input" placeholder="Envoyer un message à MirzAI..." rows="1" autofocus></textarea>
                     <div class="input-actions">
                         <span class="token-counter" id="token-counter"></span>
+                        <button class="btn-stop" id="btn-stop" title="Arrêter la génération" style="display: none;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                        </button>
                         <button class="btn-send" id="btn-send" title="Envoyer">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
                         </button>
                     </div>
+                </div>
+                <div class="context-progress" id="context-progress" style="display: none;">
+                    <div class="context-progress-bar">
+                        <div class="context-progress-fill" id="context-progress-fill"></div>
+                    </div>
+                    <span class="context-progress-text" id="context-progress-text">0 / 8k tokens</span>
                 </div>
                 <div class="input-footer"><span class="input-hint">Entrée pour envoyer · Shift+Entrée pour un saut de ligne</span></div>
             </div>
@@ -538,10 +554,12 @@
                     <div id="providers-list" class="providers-list"></div>
                 </div>
                 <div class="tab-content" id="tab-generation">
+                    <!-- Sampling -->
+                    <div class="setting-group-header">Sampling</div>
                     <div class="setting-group">
                         <label for="setting-temperature">Température</label>
                         <div class="setting-range-row">
-                            <input type="range" id="setting-temperature" min="0" max="2" step="0.1" value="0.7" />
+                            <input type="range" id="setting-temperature" min="0" max="2" step="0.05" value="0.7" />
                             <span id="temperature-value">0.7</span>
                         </div>
                     </div>
@@ -553,19 +571,45 @@
                         </div>
                     </div>
                     <div class="setting-group">
-                        <label for="setting-repetition-penalty">Pénalité de Répétition</label>
+                        <label for="setting-top-n">Top-N</label>
+                        <input type="number" id="setting-top-n" class="setting-input" value="40" min="1" max="100" />
+                        <span class="setting-hint">Nombre de tokens à considérer (0=désactivé)</span>
+                    </div>
+                    
+                    <!-- Repetition Control -->
+                    <div class="setting-group-header">Répétition</div>
+                    <div class="setting-group">
+                        <label for="setting-presence-penalty">Presence Penalty</label>
                         <div class="setting-range-row">
-                            <input type="range" id="setting-repetition-penalty" min="1" max="2" step="0.05" value="1.1" />
-                            <span id="repetition-penalty-value">1.1</span>
+                            <input type="range" id="setting-presence-penalty" min="-2" max="2" step="0.01" value="0" />
+                            <span id="presence-penalty-value">0</span>
                         </div>
                     </div>
                     <div class="setting-group">
+                        <label for="setting-frequency-penalty">Frequency Penalty</label>
+                        <div class="setting-range-row">
+                            <input type="range" id="setting-frequency-penalty" min="-2" max="2" step="0.01" value="0" />
+                            <span id="frequency-penalty-value">0</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Output -->
+                    <div class="setting-group-header">Output</div>
+                    <div class="setting-group">
                         <label for="setting-max-tokens">Max tokens</label>
-                        <input type="number" id="setting-max-tokens" class="setting-input" value="4096" min="64" max="32768" />
+                        <input type="number" id="setting-max-tokens" class="setting-input" value="4096" min="1" max="131072" />
                     </div>
                     <div class="setting-group">
+                        <label for="setting-stop">Stop sequences</label>
+                        <input type="text" id="setting-stop" class="setting-input" placeholder="TERMINATE, END, AI:" />
+                        <span class="setting-hint">Séparés par virgule</span>
+                    </div>
+                    
+                    <!-- System -->
+                    <div class="setting-group-header">Système</div>
+                    <div class="setting-group">
                         <label for="setting-system-prompt">System prompt</label>
-                        <textarea id="setting-system-prompt" class="setting-textarea" rows="4">You are MirzAI, an intelligent and helpful AI assistant. You provide clear, precise, and concise answers.</textarea>
+                        <textarea id="setting-system-prompt" class="setting-textarea" rows="4">Tu es Mirza, un assistant IA intelligent et serviable. Tu réponds de manière claire, précise et concise en français.</textarea>
                     </div>
                 </div>
                 <div class="tab-content" id="tab-tools">
@@ -656,6 +700,37 @@
 
                     <div style="margin-top: 1rem; display: flex; gap: 1rem;">
                         <button class="btn btn-primary" id="btn-start-serve" style="flex: 1; padding: 0.75rem;">Launch Server</button>
+                    </div>
+
+                    <div class="field-group" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                        <label style="display: block; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem;">⚡ Auto-Tuning (llama-optimus)</label>
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                                <span>Enable Tuning</span>
+                                <input type="checkbox" id="option-tune" style="width: 18px; height: 18px; accent-color: var(--color-primary);">
+                            </label>
+                            <div id="tune-options" style="display: none; padding: 0.75rem; background: var(--bg-secondary); border-radius: 8px;">
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <div style="flex: 1;">
+                                        <label style="font-size: 0.75rem; color: var(--text-muted);">Trials</label>
+                                        <select id="option-trials" class="select-filter" style="width: 100%; font-size: 0.8rem;">
+                                            <option value="15">15 (fast)</option>
+                                            <option value="25" selected>25 (default)</option>
+                                            <option value="45">45 (thorough)</option>
+                                        </select>
+                                    </div>
+                                    <div style="flex: 1;">
+                                        <label style="font-size: 0.75rem; color: var(--text-muted);">Metric</label>
+                                        <select id="option-metric" class="select-filter" style="width: 100%; font-size: 0.8rem;">
+                                            <option value="tg" selected>Token Gen</option>
+                                            <option value="pp">Prompt Proc</option>
+                                            <option value="mean">Average</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <p style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.5rem;">Uses llama-bench (server can be running)</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>

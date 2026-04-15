@@ -68,35 +68,35 @@ show_header() {
 # ==============================================================================
 
 cmd_start() {
-    echo -e "${GREEN}[↑] Wake up: $HOST ...${NC}"
+    echo -e "${GREEN}[↑] Waking up: $HOST ...${NC}"
     wakeonlan "$MAC_ADDR"
 }
 
 cmd_ssh() {
-    echo -e "${BLUE}[→] SSH remote connection to: $HOST...${NC}"
+    echo -e "${BLUE}[→] SSH to: $HOST...${NC}"
     ssh $SSH_OPTS "$SSH_TARGET"
 }
 
 cmd_sleep() {
-    echo -e "${YELLOW}[☾] Sleep mode: $HOST...${NC}"
+    echo -e "${YELLOW}[☾] Sleeping: $HOST...${NC}"
     ssh -t $SSH_OPTS "$SSH_TARGET" 'sudo pmset sleepnow'
 }
 
 cmd_reboot() {
-    echo -e "${YELLOW}[!] Reboot: $HOST...${NC}"
+    echo -e "${YELLOW}[!] Rebooting: $HOST...${NC}"
     ssh -t $SSH_OPTS "$SSH_TARGET" 'sudo shutdown -r now'
 }
 
 cmd_status() {
-    echo -e "${BLUE}[?] Vérification statut: $HOST...${NC}"
+    echo -e "${BLUE}[?] Checking status: $HOST...${NC}"
     echo ""
 
     # Ping check
     ping -c 1 -W 1 "$HOST" > /dev/null 2>&1
     if [ $? -eq 0 ]; then
-        echo -e "  Serveur:      ${GREEN}● ONLINE${NC}"
+        echo -e "  Server:      ${GREEN}● ONLINE${NC}"
     else
-        echo -e "  Serveur:      ${RED}● OFFLINE${NC} (ou en veille profonde)"
+        echo -e "  Server:      ${RED}● OFFLINE${NC} (or deep sleep)"
         return 1
     fi
 
@@ -111,7 +111,7 @@ else:
     print('none')
 " 2>/dev/null)
         echo -e "  API Llama:     ${GREEN}● RUNNING${NC} (port ${API_PORT})"
-        echo -e "  Modèle actif: ${CYAN}${ACTIVE}${NC}"
+        echo -e "  Active model: ${CYAN}${ACTIVE}${NC}"
     else
         echo -e "  API Llama:     ${DIM}○ STOPPED${NC}"
     fi
@@ -128,12 +128,12 @@ else:
 
 cmd_config() {
     if [ "$2" = "--refresh" ] || [ ! -f "$CONF_FILE" ]; then
-        echo -e "${BLUE}[⟳] Régénération de la configuration...${NC}"
+        echo -e "${BLUE}[⟳] Regenerating configuration...${NC}"
         bash "$SCRIPT_DIR/gen_config.sh"
     else
         if [ -f "$CONF_FILE" ]; then
-            echo -e "${BLUE}[☰] Configuration Mirza${NC}"
-            echo -e "${DIM}  (fichier: ${CONF_FILE})${NC}"
+            echo -e "${BLUE}[☰] Mirza Configuration${NC}"
+            echo -e "${DIM}  (file: ${CONF_FILE})${NC}"
             echo ""
             # Pretty-print the config
             while IFS= read -r line; do
@@ -152,18 +152,18 @@ cmd_config() {
             done < "$CONF_FILE"
             echo ""
         else
-            echo -e "${YELLOW}Aucun fichier de configuration trouvé.${NC}"
-            echo -e "Génère-le avec: ${CYAN}mirza config --refresh${NC}"
+            echo -e "${YELLOW}No config file found.${NC}"
+            echo -e "Generate it with: ${CYAN}mirza config --refresh${NC}"
         fi
     fi
 }
 
 cmd_models() {
-    echo -e "${BLUE}[⊞] Catalogue de modèles MLX${NC}"
+    echo -e "${BLUE}[⊞] Llama.cpp Model Catalog${NC}"
     echo ""
 
     if [ ! -f "$MODELS_FILE" ]; then
-        echo -e "${RED}  ✗ Catalogue non trouvé: ${MODELS_FILE}${NC}"
+        echo -e "${RED}  ✗ Catalog not found: ${MODELS_FILE}${NC}"
         return 1
     fi
 
@@ -188,12 +188,12 @@ catalog = data.get('catalog', [])
 
 # Print categories legend
 if not cat_filter:
-    print('  Catégories disponibles:')
+    print('  Available categories:')
     for key, cat in categories.items():
         print(f'    {cat[\"icon\"]}  {cat[\"label\"]}  ({key})')
     print()
-    print(f'  RAM détectée: {ram} Go — modèles compatibles affichés')
-    print(f'  Filtrer: mirza models <catégorie>')
+    print(f'  RAM detected: {ram}GB — showing compatible models')
+    print(f'  Filter: mirza models <category>')
     print()
 
 # Filter and display models
@@ -202,28 +202,28 @@ if cat_filter:
     compatible = [m for m in compatible if cat_filter in m.get('categories', [])]
 
 if not compatible:
-    print('  Aucun modèle compatible trouvé.')
+    print('  No compatible models found.')
     sys.exit(0)
 
 # Group by family
 families = {}
 for m in compatible:
-    fam = m.get('family', 'Autre')
+    fam = m.get('family', 'Other')
     families.setdefault(fam, []).append(m)
 
 for fam, models in sorted(families.items()):
-    print(f'  ─── {fam} ───')
+    print(f'  --- {fam} ---')
     for m in sorted(models, key=lambda x: x['size_gb']):
         star = ' ★' if m.get('recommended') else ''
         cats = ' '.join(categories.get(c, {}).get('icon', '') for c in m.get('categories', []))
-        print(f'    {m[\"id\"]:<40} {m[\"size_gb\"]:>5.1f} Go  {cats}{star}')
+        print(f'    {m[\"id\"]:<40} {m[\"size_gb\"]:>5.1f}GB  {cats}{star}')
         print(f'      {m[\"description\"]}')
     print()
 " 2>/dev/null
 
     echo ""
-    echo -e "  ${DIM}★ = recommandé pour votre config${NC}"
-    echo -e "  ${DIM}Déployer: mirza deploy <model_id>${NC}"
+    echo -e "  ${DIM}★ = recommended for your config${NC}"
+    echo -e "  ${DIM}Deploy: mirza deploy <model_id>${NC}"
 }
 
 cmd_deploy() {
@@ -232,42 +232,42 @@ cmd_deploy() {
 
     if [ -z "$REPO_ID" ]; then
         echo -e "${RED}Usage: mirza deploy <hf_repo_gguf> [filename]${NC}"
-        echo -e "${DIM}  Exemple: mirza deploy Bartowski/Llama-3.2-3B-Instruct-GGUF${NC}"
+        echo -e "${DIM}  Example: mirza deploy Bartowski/Llama-3.2-3B-Instruct-GGUF${NC}"
         return 1
     fi
 
-    echo -e "${BLUE}[↓] Déploiement llama.cpp sur Mirza...${NC}"
-    echo -e "  Dépôt: ${CYAN}${REPO_ID}${NC}"
-    if [ -n "$FILENAME" ]; then echo -e "  Fichier: ${CYAN}${FILENAME}${NC}"; fi
+    echo -e "${BLUE}[↓] Deploying llama.cpp on Mirza...${NC}"
+    echo -e "  Repo: ${CYAN}${REPO_ID}${NC}"
+    if [ -n "$FILENAME" ]; then echo -e "  File: ${CYAN}${FILENAME}${NC}"; fi
     echo ""
 
     # Deploy via SSH: using the custom deploy_llama.py in llmServe
-    echo -e "${YELLOW}  Analyse et téléchargement (via hf)...${NC}"
+    echo -e "${YELLOW}  Analyzing and downloading (via hf)...${NC}"
     remote_exec "cd ~/llmServe && uv run python deploy_llama.py '${REPO_ID}' '${FILENAME}'"
 
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}  ✓ Modèle déployé avec succès !${NC}"
-        echo -e "  Lancer: ${CYAN}mirza serve${NC}"
+        echo -e "${GREEN}  ✓ Model deployed successfully!${NC}"
+        echo -e "  Start: ${CYAN}mirza serve${NC}"
     else
-        echo -e "${RED}  ✗ Erreur lors du déploiement.${NC}"
+        echo -e "${RED}  ✗ Deployment failed.${NC}"
     fi
 }
 
 cmd_remove() {
     local FILENAME="$2"
     if [ -z "$FILENAME" ]; then
-        echo -e "${RED}Usage: mirza remove <filename.gguf>${NC}"
-        echo -e "${DIM}  Liste des modèles: mirza status (ou ssh ls ~/mirza-models)${NC}"
+        echo -e "${RED}Usage: mirza remove .gguf${NC}"
+        echo -e "${DIM}  List models: mirza status (or ssh ls ~/mirza-models)${NC}"
         return 1
     fi
 
-    echo -e "${YELLOW}[-] Suppression du modèle: ${FILENAME}...${NC}"
+    echo -e "${YELLOW}[-] Removing model: ${FILENAME}...${NC}"
     remote_exec "rm -f ~/mirza-models/${FILENAME}"
     
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}  ✓ Modèle supprimé.${NC}"
+        echo -e "${GREEN}  ✓ Model removed.${NC}"
     else
-        echo -e "${RED}  ✗ Erreur lors de la suppression.${NC}"
+        echo -e "${RED}  ✗ Removal failed.${NC}"
     fi
 }
 
@@ -286,12 +286,15 @@ cmd_serve() {
             --ctx)        CTX="$2"; shift 2 ;;
             --no-fa)      FA=""; shift ;;
             --port)       PORT="$2"; shift 2 ;;
+            --tune)       EXTRA_FLAGS="$EXTRA_FLAGS --tune"; shift ;;
+            --trials)     EXTRA_FLAGS="$EXTRA_FLAGS --trials $2"; shift 2 ;;
+            --metric)     EXTRA_FLAGS="$EXTRA_FLAGS --metric $2"; shift 2 ;;
             -*)           EXTRA_FLAGS="$EXTRA_FLAGS $1"; shift ;;
             *)            EXTRA_FLAGS="$EXTRA_FLAGS $1"; shift ;;
         esac
     done
 
-    echo -e "${BLUE}[▶] Démarrage du serveur Llama-CPP...${NC}"
+    echo -e "${BLUE}[▶] Starting Llama-CPP server...${NC}"
     echo -e "  Port:      ${CYAN}${PORT}${NC}"
     echo -e "  Context:   ${CYAN}${CTX}${NC}"
     echo -e "  KV Cache:  ${CYAN}${KV_Q}${NC}"
@@ -303,11 +306,11 @@ cmd_serve() {
 
     echo ""
     # Wait for server
-    printf "  Attente du serveur"
+    printf "  Waiting for server"
     for i in $(seq 1 30); do
         if curl -sf --max-time 1 "http://${HOST}:${PORT}/v1/models" &>/dev/null; then
             echo ""
-            echo -e "${GREEN}  ✓ Serveur opérationnel !${NC}"
+            echo -e "${GREEN}  ✓ Server ready!${NC}"
             echo -e "  Endpoint: ${YELLOW}http://${HOST}:${PORT}/v1${NC}"
             return 0
         fi
@@ -315,14 +318,50 @@ cmd_serve() {
         sleep 2
     done
     echo ""
-    echo -e "${YELLOW}  ⏳ Le serveur démarre lentement...${NC}"
-    echo -e "  ${DIM}Vérifier: mirza ssh puis tail -f /tmp/mirza-llm.stderr.log${NC}"
+    echo -e "${YELLOW}  ⏳ Server starting slowly...${NC}"
+    echo -e "  ${DIM}Check: mirza ssh then tail -f /tmp/mirza-llm.stderr.log${NC}"
+}
+
+cmd_tune() {
+    local TRIALS=25
+    local METRIC="tg"
+    local MODEL_FILE=""
+    
+    shift
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --trials) TRIALS="$2"; shift 2 ;;
+            --metric) METRIC="$2"; shift 2 ;;
+            --model) MODEL_FILE="$2"; shift 2 ;;
+            *) shift ;;
+        esac
+    done
+    
+    if [ -z "$MODEL_FILE" ]; then
+        MODEL_FILE=$(remote_exec "cat ~/llmServe/active_model.json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin).get(\"file\",\"\"))'" 2>/dev/null)
+    fi
+    
+    echo -e "${CYAN}[⚡] Auto-tuning Llama-CPP...${NC}"
+    echo -e "  Trials:    ${CYAN}${TRIALS}${NC}"
+    echo -e "  Metric:   ${CYAN}${METRIC}${NC}"
+    echo -e "  Model:    ${CYAN}${MODEL_FILE:-auto-detect}${NC}"
+    echo ""
+    echo -e "${YELLOW}  Using llama-bench to benchmark (server can be running or not)${NC}"
+    
+    local TUNE_CMD="uv run python serve_llama.py --tune --trials $TRIALS --metric $METRIC"
+    if [ -n "$MODEL_FILE" ]; then
+        TUNE_CMD="$TUNE_CMD --model ~/mirza-models/$MODEL_FILE"
+    else
+        TUNE_CMD="$TUNE_CMD --model ~/mirza-models/*.gguf"
+    fi
+    
+    remote_exec "cd ~/llmServe && $TUNE_CMD"
 }
 
 cmd_stop_llm() {
-    echo -e "${YELLOW}[■] Arrêt du serveur Llama-CPP...${NC}"
+    echo -e "${YELLOW}[■] Stopping Llama-CPP server...${NC}"
     remote_exec "pkill -f 'llama_cpp.server' 2>/dev/null"
-    echo -e "${GREEN}  ✓ Serveur arrêté.${NC}"
+    echo -e "${GREEN}  ✓ Server stopped.${NC}"
 }
 
 cmd_stop() {
@@ -333,20 +372,20 @@ cmd_stop() {
 }
 
 cmd_chat() {
-    echo -e "${BLUE}[] Chat interactif avec Mirza${NC}"
+    echo -e "${BLUE}[] Interactive chat with Mirza${NC}"
     echo -e "${DIM}  Endpoint: http://${HOST}:${API_PORT}/v1/chat/completions${NC}"
-    echo -e "${DIM}  Tapez 'exit' pour quitter, 'clear' pour réinitialiser${NC}"
+    echo -e "${DIM}  Type 'exit' to quit, 'clear' to reset${NC}"
     echo ""
 
     # Build conversation history
     MESSAGES='[]'
 
     while true; do
-        echo -ne "${GREEN}Vous > ${NC}"
+        echo -ne "${GREEN}You > ${NC}"
         read -r USER_INPUT
 
-        [ "$USER_INPUT" = "exit" ] && echo -e "\n${DIM}Au revoir !${NC}" && break
-        [ "$USER_INPUT" = "clear" ] && MESSAGES='[]' && echo -e "${DIM}  Historique réinitialisé.${NC}\n" && continue
+        [ "$USER_INPUT" = "exit" ] && echo -e "\n${DIM}Bye!${NC}" && break
+        [ "$USER_INPUT" = "clear" ] && MESSAGES='[]' && echo -e "${DIM}  History cleared.${NC}\n" && continue
         [ -z "$USER_INPUT" ] && continue
 
         # Add user message to history
@@ -369,8 +408,8 @@ print(json.dumps(msgs))
             }" 2>/dev/null)
 
         if [ -z "$RESPONSE" ]; then
-            echo -e "${RED}  [Erreur: pas de réponse du serveur]${NC}"
-            echo -e "${DIM}  Vérifiez que le serveur tourne: mirza status${NC}"
+            echo -e "${RED}  [Error: no response from server]${NC}"
+            echo -e "${DIM}  Check server: mirza status${NC}"
             continue
         fi
 
@@ -381,7 +420,7 @@ try:
     data = json.load(sys.stdin)
     print(data['choices'][0]['message']['content'])
 except:
-    print('[Erreur de parsing]')
+    print('[Parse error]')
 " 2>/dev/null)
 
         echo "$REPLY"
@@ -399,10 +438,10 @@ print(json.dumps(msgs))
 
 cmd_tunnel() {
     local PORT="${2:-$API_PORT}"
-    echo -e "${BLUE}[⇋] Création du tunnel SSH...${NC}"
-    echo -e "  Port local ${CYAN}${PORT}${NC} → Mirza:${CYAN}${PORT}${NC}"
-    echo -e "  API accessible sur: ${YELLOW}http://localhost:${PORT}/v1${NC}"
-    echo -e "${DIM}  Ctrl+C pour fermer le tunnel${NC}"
+    echo -e "${BLUE}[⇋] Creating SSH tunnel...${NC}"
+    echo -e "  Local ${CYAN}${PORT}${NC} → Mirza:${CYAN}${PORT}${NC}"
+    echo -e "  API at: ${YELLOW}http://localhost:${PORT}/v1${NC}"
+    echo -e "${DIM}  Ctrl+C to close${NC}"
     echo ""
     ssh $SSH_OPTS -N -L "${PORT}:localhost:${PORT}" "$SSH_TARGET"
 }
@@ -411,23 +450,23 @@ cmd_ui() {
     local PORT="${2:-$API_PORT}"
 
     if [ ! -f "$WEBUI_DIR/index.html" ]; then
-        echo -e "${RED}  ✗ WebUI non trouvée: ${WEBUI_DIR}${NC}"
+        echo -e "${RED}  ✗ WebUI not found: ${WEBUI_DIR}${NC}"
         return 1
     fi
 
-    echo -e "${BLUE}[] Lancement de la WebUI Mirza...${NC}"
+    echo -e "${BLUE}[] Launching Mirza WebUI...${NC}"
     echo ""
 
     # Check if tunnel is needed (are we on the same machine as the server?)
     if ! curl -sf --max-time 2 "http://localhost:${PORT}/v1/models" &>/dev/null; then
-        echo -e "${YELLOW}  Le serveur MLX n'est pas accessible sur localhost:${PORT}${NC}"
-        echo -e "${YELLOW}  Lancement du tunnel SSH en arrière-plan...${NC}"
+        echo -e "${YELLOW}  Llama.cpp not accessible on localhost:${PORT}${NC}"
+        echo -e "${YELLOW}  Creating SSH tunnel in background...${NC}"
         ssh $SSH_OPTS -N -f -L "${PORT}:localhost:${PORT}" "$SSH_TARGET"
         sleep 1
-        echo -e "${GREEN}  ✓ Tunnel actif.${NC}"
+        echo -e "${GREEN}  ✓ Tunnel active.${NC}"
     fi
 
-    echo -e "  API MLX:  ${YELLOW}http://localhost:${PORT}/v1${NC}"
+    echo -e "  API Llama.cpp:  ${YELLOW}http://localhost:${PORT}/v1${NC}"
     echo -e "  WebUI:    ${YELLOW}http://localhost:3333${NC}"
     echo ""
 
@@ -438,7 +477,7 @@ cmd_ui() {
 }
 
 cmd_stop_ui() {
-    echo -e "${YELLOW}[■] Arrêt de la WebUI Mirza...${NC}"
+    echo -e "${YELLOW}[■] Stopping Mirza WebUI...${NC}"
     # Target common ways server.py might be running
     local pids=$(pgrep -f "python.*server.py" || true)
     
@@ -449,37 +488,38 @@ cmd_stop_ui() {
 
     if [ -n "$pids" ]; then
         kill $pids 2>/dev/null
-        echo -e "${GREEN}  ✓ WebUI arrêtée.${NC}"
+        echo -e "${GREEN}  ✓ WebUI stopped.${NC}"
     else
-        echo -e "${DIM}  Aucune WebUI Mirza en cours d'exécution.${NC}"
+        echo -e "${DIM}  No WebUI running.${NC}"
     fi
 }
 
 cmd_help() {
     show_header
-    echo -e "  ${BOLD}Gestion du serveur${NC}"
-    echo -e "    ${CYAN}mirza start${NC}              Réveiller le serveur (Wake-on-LAN)"
-    echo -e "    ${CYAN}mirza ssh${NC}                Session SSH interactive"
-    echo -e "    ${CYAN}mirza status${NC}             État du serveur et des services"
-    echo -e "    ${CYAN}mirza sleep${NC}              Mettre en veille"
-    echo -e "    ${CYAN}mirza reboot${NC}             Redémarrer"
+    echo -e "  ${BOLD}Server Management${NC}"
+    echo -e "    ${CYAN}mirza start${NC}              Wake server (Wake-on-LAN)"
+    echo -e "    ${CYAN}mirza ssh${NC}                Interactive SSH session"
+    echo -e "    ${CYAN}mirza status${NC}             Server and services status"
+    echo -e "    ${CYAN}mirza sleep${NC}              Put to sleep"
+    echo -e "    ${CYAN}mirza reboot${NC}             Reboot"
     echo ""
-    echo -e "  ${BOLD}Intelligence Artificielle (llama.cpp)${NC}"
-    echo -e "    ${CYAN}mirza models${NC} [catégorie]  Catalogue de modèles"
-    echo -e "    ${CYAN}mirza deploy${NC} <repo> [file] Déployer un GGUF (via hf)"
-    echo -e "    ${CYAN}mirza remove${NC} <filename>   Supprimer un modèle local"
-    echo -e "    ${CYAN}mirza serve${NC}              Lancer le serveur d'inférence"
-    echo -e "    ${CYAN}mirza stop${NC}               Arrêter tous les services (LLM + UI)"
-    echo -e "    ${CYAN}mirza stop-llm${NC}           Arrêter uniquement le serveur LLM"
-    echo -e "    ${CYAN}mirza chat${NC}               Chat interactif en terminal"
+    echo -e "  ${BOLD}AI Inference (Llama.cpp)${NC}"
+    echo -e "    ${CYAN}mirza models${NC} [category]    Model catalog"
+    echo -e "    ${CYAN}mirza deploy${NC} <repo> [file] Deploy GGUF (via hf)"
+    echo -e "    ${CYAN}mirza remove${NC}    Remove local model"
+    echo -e "    ${CYAN}mirza serve${NC}              Start inference server"
+    echo -e "    ${CYAN}mirza tune${NC} [--trials N]      Auto-tune parameters"
+    echo -e "    ${CYAN}mirza stop-llm${NC}           Stop LLM server only"
+    echo -e "    ${CYAN}mirza chat${NC}               Terminal chat"
     echo ""
     echo -e "  ${BOLD}Interface & Config${NC}"
-    echo -e "    ${CYAN}mirza ui${NC}                 Lancer la WebUI de chat"
-    echo -e "    ${CYAN}mirza stop-ui${NC}            Arrêter la WebUI locale"
-    echo -e "    ${CYAN}mirza tunnel${NC} [port]       Tunnel SSH vers l'API MLX"
-    echo -e "    ${CYAN}mirza config${NC}             Afficher la configuration"
-    echo -e "    ${CYAN}mirza config --refresh${NC}   Régénérer la configuration via SSH"
+    echo -e "    ${CYAN}mirza ui${NC}                 Launch WebUI"
+    echo -e "    ${CYAN}mirza stop-ui${NC}            Stop local WebUI"
+    echo -e "    ${CYAN}mirza tunnel${NC} [port]       SSH tunnel to API"
+    echo -e "    ${CYAN}mirza config${NC}             Show configuration"
+    echo -e "    ${CYAN}mirza config --refresh${NC}   Regenerate via SSH"
     echo ""
+    echo -e "  ${DIM}Documentation: ${YELLOW}~/git/mirza.local/README.md${NC}"
 }
 
 # ==============================================================================
@@ -496,6 +536,7 @@ case "$1" in
     deploy)         cmd_deploy "$@" ;;
     remove|rm-model) cmd_remove "$@" ;;
     serve)          cmd_serve "$@" ;;
+    tune)           cmd_tune "$@" ;;
     stop-llm)       cmd_stop_llm ;;
     chat)           cmd_chat ;;
     tunnel)         cmd_tunnel "$@" ;;

@@ -11,12 +11,12 @@ Le **Model Context Protocol** (Anthropic, open standard) permet à un LLM d'appe
 ```
 ┌──────────┐    ┌──────────────┐    ┌─────────────┐
 │ WebUI    │───▶│ LLM Server   │───▶│ MCP Server  │
-│ (client) │    │ (MLX / Cloud)│    │ (tools)     │
+│ (client) │    │ (Llama.cpp)  │    │ (tools)     │
 └──────────┘    └──────────────┘    └─────────────┘
                        │                    │
-                  API OpenAI          Tool calls
-                  /v1/chat/           (fonctions)
-                  completions
+                   API OpenAI          Tool calls
+                   /v1/chat/           (fonctions)
+                   completions
 ```
 
 L'idée : le LLM reçoit la liste des outils disponibles, décide quand les utiliser, et renvoie les résultats dans la conversation.
@@ -48,7 +48,7 @@ L'idée : le LLM reçoit la liste des outils disponibles, décide quand les util
 
 | Composant | Choix | Justification |
 |---|---|---|
-| **Langage** | Python | Cohérent avec l'écosystème MLX + uv |
+| **Langage** | Python | Cohérent avec l'écosystème Llama.cpp + uv |
 | **Framework** | FastAPI | API HTTP rapide, async, OpenAPI auto-doc |
 | **Package manager** | uv | Cohérent avec le reste du projet |
 | **Transport** | HTTP + SSE | Compatible avec le standard MCP |
@@ -161,7 +161,7 @@ mirzaServer/mcp/
 sequenceDiagram
     participant U as Utilisateur
     participant W as WebUI
-    participant L as LLM (MLX)
+    participant L as LLM (Llama.cpp)
     participant M as MCP Server
 
     U->>W: "Quelle heure est-il à Tokyo ?"

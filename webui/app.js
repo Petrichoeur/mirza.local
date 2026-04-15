@@ -41,14 +41,35 @@ const state = {
         flash_attn: true,
         mlock: true, 
         warmup: false,
-        chat_format: ''
+        chat_format: '',
+        tune: false,
+        trials: 25,
+        metric: 'tg'
     },
     settings: {
+        // Sampling parameters (OpenAI compatible)
         temperature: 0.7,
-        topP: 1.0,
-        repetitionPenalty: 1.1,
-        maxTokens: 4096,
-        systemPrompt: 'Tu es Mirza, un assistant IA intelligent et serviable. Tu réponds de manière claire, précise et concise en français.',
+        top_p: 1.0,
+        top_n: 40,
+        max_tokens: 4096,
+        // Repetition control
+        frequency_penalty: 0.0,
+        presence_penalty: 0.0,
+        repetition_penalty: 1.1,
+        // Stop sequences
+        stop: null,
+        // Response format
+        response_format: null,
+        // Seed for deterministic sampling
+        seed: null,
+        // Tool/function calling
+        tools: null,
+        tool_choice: "auto",
+        // Logit bias (sent as object)
+        logit_bias: null,
+        // System prompt
+        systemPrompt: 'Tu es Mirza, un assistant IA intelligent et serviable. Tu réponds de manière claire, précision et concise en français.',
+        // MCP
         mcpEndpoint: '',
         mcpTools: [],
         mcpEnabled: {}
@@ -70,6 +91,9 @@ function initDom() {
         'setting-temperature', 'temperature-value',
         'setting-top-p', 'top-p-value',
         'setting-repetition-penalty', 'repetition-penalty-value',
+        'setting-top-n', 'setting-stop',
+        'setting-presence-penalty', 'presence-penalty-value',
+        'setting-frequency-penalty', 'frequency-penalty-value',
         'setting-max-tokens', 'setting-system-prompt',
         'setting-mcp-endpoint',
         'mcp-tools-list', 'btn-refresh-mcp',
@@ -100,17 +124,27 @@ function initDom() {
     dom.messagesScroll = document.getElementById('messages-scroll');
     dom.messageInput = document.getElementById('message-input');
     dom.btnSend = document.getElementById('btn-send');
+    dom.btnStop = document.getElementById('btn-stop');
     dom.btnNewChat = document.getElementById('btn-new-chat');
     dom.providerSelect = document.getElementById('provider-select');
     dom.modelSelect = document.getElementById('model-select');
     dom.providerStatusDot = document.getElementById('provider-status-dot');
     dom.tokenCounter = document.getElementById('token-counter');
+    dom.contextProgress = document.getElementById('context-progress');
+    dom.contextProgressFill = document.getElementById('context-progress-fill');
+    dom.contextProgressText = document.getElementById('context-progress-text');
     dom.settingsModal = document.getElementById('settings-modal');
     dom.btnSettings = document.getElementById('btn-settings');
     dom.btnCloseSettings = document.getElementById('btn-close-settings');
     dom.settingTemperature = document.getElementById('setting-temperature');
     dom.temperatureValue = document.getElementById('temperature-value');
     dom.settingMaxTokens = document.getElementById('setting-max-tokens');
+    dom.settingTopN = document.getElementById('setting-top-n');
+    dom.settingStop = document.getElementById('setting-stop');
+    dom.settingPresencePenalty = document.getElementById('setting-presence-penalty');
+    dom.presencePenaltyValue = document.getElementById('presence-penalty-value');
+    dom.settingFrequencyPenalty = document.getElementById('setting-frequency-penalty');
+    dom.frequencyPenaltyValue = document.getElementById('frequency-penalty-value');
     dom.settingSystemPrompt = document.getElementById('setting-system-prompt');
     dom.settingMcpEndpoint = document.getElementById('setting-mcp-endpoint');
     dom.mcpToolsList = document.getElementById('mcp-tools-list');
@@ -144,6 +178,10 @@ function initDom() {
     dom.vramLblWeights = document.getElementById('vram-lbl-weights');
     dom.vramLblKv = document.getElementById('vram-lbl-kv');
     dom.vramLblCompute = document.getElementById('vram-lbl-compute');
+    dom.vramOsRam = document.getElementById('vram-os-ram');
+    dom.vramOsRamValue = document.getElementById('vram-total-ram-value');
+    dom.vramOsRamSys = document.getElementById('vram-os-ram-sys');
+    dom.vramOsRamSysValue = document.getElementById('vram-os-ram-sys-value');
     dom.grafanaIframe = document.getElementById('grafana-iframe');
     dom.dashMetalBadge = document.getElementById('dash-metal-badge');
     dom.btnRefreshLogs = document.getElementById('btn-refresh-logs');
@@ -190,22 +228,51 @@ function loadState() {
     try { const s = localStorage.getItem('mirza_conversations'); if (s) state.conversations = JSON.parse(s); } catch (e) { }
     try { const s = localStorage.getItem('mirza_settings'); if (s) Object.assign(state.settings, JSON.parse(s)); } catch (e) { }
     try { const s = localStorage.getItem('mirza_providers'); state.providers = s ? JSON.parse(s) : JSON.parse(JSON.stringify(DEFAULT_PROVIDERS)); } catch (e) { state.providers = JSON.parse(JSON.stringify(DEFAULT_PROVIDERS)); }
+    
+    // Migration: clean up old MLX references in provider names
+    state.providers = state.providers.map(p => {
+        if (p.name && p.name.includes('MLX')) {
+            return { ...p, name: p.name.replace(/MLX/g, 'Llama.cpp').replace(/Local/g, 'Local Llama.cpp') };
+        }
+        if (p.id === 'mirza-local' && (!p.name || p.name.includes('MLX'))) {
+            return { ...p, name: 'Mirza (Llama.cpp)' };
+        }
+        return p;
+    });
+    
     state.activeProviderId = localStorage.getItem('mirza_active_provider') || 'mirza-local';
     state.activeConversationId = localStorage.getItem('mirza_active_conversation');
 
-    dom.settingTemperature.value = state.settings.temperature;
-    dom.temperatureValue.textContent = state.settings.temperature;
+    // Load from state.settings (new naming)
+    dom.settingTemperature.value = state.settings.temperature || 0.7;
+    dom.temperatureValue.textContent = state.settings.temperature || 0.7;
     if (dom.settingTopP) {
-        dom.settingTopP.value = state.settings.topP || 0.95;
-        dom.topPValue.textContent = state.settings.topP || 0.95;
+        dom.settingTopP.value = state.settings.top_p || 0.95;
+        dom.topPValue.textContent = state.settings.top_p || 0.95;
     }
-    if (dom.settingRepetitionPenalty) {
-        dom.settingRepetitionPenalty.value = state.settings.repetitionPenalty || 1.1;
-        dom.repetitionPenaltyValue.textContent = state.settings.repetitionPenalty || 1.1;
+    if (dom.settingTopN) {
+        dom.settingTopN.value = state.settings.top_n || 40;
     }
-    dom.settingMaxTokens.value = state.settings.maxTokens;
-    dom.settingSystemPrompt.value = state.settings.systemPrompt;
-    dom.settingMcpEndpoint.value = state.settings.mcpEndpoint || '';
+    if (dom.settingPresencePenalty) {
+        dom.settingPresencePenalty.value = state.settings.presence_penalty || 0;
+        dom.presencePenaltyValue.textContent = state.settings.presence_penalty || 0;
+    }
+    if (dom.settingFrequencyPenalty) {
+        dom.settingFrequencyPenalty.value = state.settings.frequency_penalty || 0;
+        dom.frequencyPenaltyValue.textContent = state.settings.frequency_penalty || 0;
+    }
+    if (dom.settingStop) {
+        dom.settingStop.value = (state.settings.stop || []).join(', ');
+    }
+    if (dom.settingMaxTokens) {
+        dom.settingMaxTokens.value = state.settings.max_tokens || 4096;
+    }
+    if (dom.settingSystemPrompt) {
+        dom.settingSystemPrompt.value = state.settings.systemPrompt || '';
+    }
+    if (dom.settingMcpEndpoint) {
+        dom.settingMcpEndpoint.value = state.settings.mcpEndpoint || '';
+    }
 }
 
 function saveState() {
@@ -316,6 +383,13 @@ function setupEventListeners() {
 
     // Chat
     dom.btnSend.addEventListener('click', sendMessage);
+    dom.btnStop.addEventListener('click', () => {
+        if (state.abortController) {
+            state.abortController.abort();
+            dom.btnStop.style.display = 'none';
+            dom.btnSend.style.display = 'flex';
+        }
+    });
     dom.messageInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
     });
@@ -352,6 +426,13 @@ function setupEventListeners() {
     if (dom.settingRepetitionPenalty) {
         dom.settingRepetitionPenalty.addEventListener('input', (e) => dom.repetitionPenaltyValue.textContent = e.target.value);
     }
+    // New penalty settings
+    if (dom.settingPresencePenalty) {
+        dom.settingPresencePenalty.addEventListener('input', (e) => dom.presencePenaltyValue.textContent = e.target.value);
+    }
+    if (dom.settingFrequencyPenalty) {
+        dom.settingFrequencyPenalty.addEventListener('input', (e) => dom.frequencyPenaltyValue.textContent = e.target.value);
+    }
     dom.btnAddProvider.addEventListener('click', addCustomProvider);
     dom.btnRefreshMcp.addEventListener('click', refreshMcpTools);
     dom.btnExportConversations.addEventListener('click', exportConversations);
@@ -371,7 +452,7 @@ function setupEventListeners() {
     // Dashboard actions
     dom.btnRefreshStatus.addEventListener('click', loadDashboard);
     dom.btnRefreshLogs.addEventListener('click', () => loadLogs(false));
-    dom.dashLogs.addEventListener('click', () => loadLogs(false));
+    // Removed: click-to-refresh on logs area to avoid interfering with reading
     // Clear logs button (clears display only, not the file on server)
     const btnClearLogs = document.getElementById('btn-clear-logs');
     if (btnClearLogs) {
@@ -526,34 +607,36 @@ async function loadDashboard() {
                     dom.dashMetalBadge.style.display = data.vram_metrics.metal_active ? 'block' : 'none';
                 }
                 const m = data.vram_metrics;
-                const totalInUseMb = m.weights + m.kv + m.compute;
-                const totalInUseGb = (totalInUseMb / 1024).toFixed(1);
+                const totalInUseGb = m.weights + m.kv + m.compute;
                 const totalSysRamGb = parseFloat(data.hardware?.ram_gb) || 24.0;
-                const totalSysRamMb = totalSysRamGb * 1024;
+                const remainingRamGb = totalSysRamGb - totalInUseGb;
                 
-                dom.vramTotalValue.textContent = `${totalInUseGb} GB / ${totalSysRamGb} GB`;
+                dom.vramTotalValue.textContent = `${totalInUseGb.toFixed(1)} GB / ${remainingRamGb.toFixed(1)} GB`;
                 
-                // Calculate percentages for the progress bar segments relative to TOTAL RAM
-                const weightP = (m.weights / totalSysRamMb * 100).toFixed(1) + '%';
-                const kvP = (m.kv / totalSysRamMb * 100).toFixed(1) + '%';
-                const computeP = (m.compute / totalSysRamMb * 100).toFixed(1) + '%';
+                const weightP = (m.weights / totalSysRamGb * 100).toFixed(1) + '%';
+                const kvP = (m.kv / totalSysRamGb * 100).toFixed(1) + '%';
+                const computeP = (m.compute / totalSysRamGb * 100).toFixed(1) + '%';
                 
                 dom.vramBarWeights.style.width = weightP;
                 dom.vramBarKv.style.width = kvP;
                 dom.vramBarCompute.style.width = computeP;
                 
-                // Add titles for tooltips & update legend labels
-                const wGb = (m.weights/1024).toFixed(2);
-                const kGb = (m.kv/1024).toFixed(2);
-                const cGb = (m.compute/1024).toFixed(2);
+                dom.vramBarWeights.title = `Weights: ${m.weights.toFixed(2)} GB`;
+                dom.vramBarKv.title = `KV Cache: ${m.kv.toFixed(2)} GB`;
+                dom.vramBarCompute.title = `Compute: ${m.compute.toFixed(2)} GB`;
 
-                dom.vramBarWeights.title = `Weights: ${wGb} GB`;
-                dom.vramBarKv.title = `KV Cache: ${kGb} GB`;
-                dom.vramBarCompute.title = `Compute: ${cGb} GB`;
+                if (dom.vramLblWeights) dom.vramLblWeights.textContent = `Weights: ${m.weights.toFixed(2)} GB`;
+                if (dom.vramLblKv) dom.vramLblKv.textContent = `KV Cache: ${m.kv.toFixed(2)} GB`;
+                if (dom.vramLblCompute) dom.vramLblCompute.textContent = `Compute: ${m.compute.toFixed(2)} GB`;
 
-                if (dom.vramLblWeights) dom.vramLblWeights.textContent = `Weights: ${wGb} GB`;
-                if (dom.vramLblKv) dom.vramLblKv.textContent = `KV Cache: ${kGb} GB`;
-                if (dom.vramLblCompute) dom.vramLblCompute.textContent = `Compute: ${cGb} GB`;
+                if (dom.vramOsRamValue && m.total_ram_used) {
+                    dom.vramOsRamValue.textContent = `${m.total_ram_used.toFixed(1)} GB`;
+                }
+                if (dom.vramOsRamSysValue && m.os_ram_used) {
+                    const llmRam = m.weights + m.kv + m.compute;
+                    const osRamSys = m.total_ram_used - llmRam;
+                    dom.vramOsRamSysValue.textContent = `${osRamSys.toFixed(1)} GB`;
+                }
             } else if (dom.vramMonitor) {
                 dom.vramMonitor.style.display = 'none';
             }
@@ -570,10 +653,23 @@ async function loadDashboard() {
             dom.dashSectionDownload.style.display = 'none';
         }
 
-        const grafanaUrl = `http://${data.host || 'mirza.local'}:3000/d/f09f8d8e-mirza-monitor-lite/mirza-monitor-lite?kiosk`;
+        const grafanaUrl = `http://${data.host || 'mirza.local'}:3000/d/f09f8d8e-mirza-monitor-lite/mirza-monitor-lite?orgId=1&kiosk`;
         const iframe = document.getElementById('grafana-iframe');
-        if (iframe && iframe.src !== grafanaUrl && iframe.src !== grafanaUrl + '/') {
-            iframe.src = grafanaUrl;
+        if (iframe) {
+            // Only set src if not already loaded or if host changed
+            const currentSrc = iframe.src || '';
+            const expectedUrl = grafanaUrl;
+            if (!currentSrc.includes('grafana') || currentSrc !== expectedUrl && currentSrc !== expectedUrl + '/') {
+                iframe.src = expectedUrl;
+            }
+            // Add error handling
+            iframe.onerror = () => {
+                console.warn('[Grafana] Failed to load dashboard');
+                iframe.style.display = 'none';
+            };
+            iframe.onload = () => {
+                iframe.style.display = 'block';
+            };
         }
 
     } catch (e) {
@@ -1877,12 +1973,19 @@ window.setActiveProvider = setActiveProvider;
 window.deleteProvider = deleteProvider;
 
 function saveSettings() {
-    state.settings.temperature = parseFloat(dom.settingTemperature.value);
-    if (dom.settingTopP) state.settings.topP = parseFloat(dom.settingTopP.value);
-    if (dom.settingRepetitionPenalty) state.settings.repetitionPenalty = parseFloat(dom.settingRepetitionPenalty.value);
-    state.settings.maxTokens = parseInt(dom.settingMaxTokens.value);
-    state.settings.systemPrompt = dom.settingSystemPrompt.value;
-    state.settings.mcpEndpoint = dom.settingMcpEndpoint.value.replace(/\/+$/, '');
+    // Sampling
+    state.settings.temperature = parseFloat(dom.settingTemperature?.value || 0.7);
+    state.settings.top_p = parseFloat(dom.settingTopP?.value || 1.0);
+    state.settings.top_n = parseInt(dom.settingTopN?.value || 40) || undefined;
+    // Repetition
+    state.settings.presence_penalty = parseFloat(dom.settingPresencePenalty?.value || 0);
+    state.settings.frequency_penalty = parseFloat(dom.settingFrequencyPenalty?.value || 0);
+    // Output
+    state.settings.max_tokens = parseInt(dom.settingMaxTokens?.value || 4096);
+    state.settings.stop = dom.settingStop?.value ? dom.settingStop.value.split(',').map(s => s.trim()).filter(s => s) : null;
+    // System
+    state.settings.systemPrompt = dom.settingSystemPrompt?.value || '';
+    state.settings.mcpEndpoint = dom.settingMcpEndpoint?.value.replace(/\/+$/, '') || '';
     saveProvidersFromCards();
     saveState();
     checkProviderStatus();
@@ -1981,7 +2084,7 @@ function deleteConversation(id) {
 
 function switchConversation(id) {
     state.activeConversationId = id;
-    saveState(); renderConversationsList(); updateChatView(); renderMessages();
+    saveState(); renderConversationsList(); updateChatView(); renderMessages(); updateContextProgress();
 }
 
 function renderConversationsList() {
@@ -2103,10 +2206,14 @@ async function sendMessage() {
     let conv = getActiveConversation();
     if (!conv) conv = createConversation(input);
     conv.messages.push({ role: 'user', content: input });
-    saveState(); updateChatView(); renderMessages();
+    saveState(); updateChatView(); renderMessages(); updateContextProgress();
     dom.messageInput.value = ''; dom.messageInput.style.height = 'auto';
 
-    state.isStreaming = true; dom.btnSend.disabled = true;
+    state.isStreaming = true;
+    state.abortController = new AbortController();
+    dom.btnSend.disabled = true;
+    dom.btnSend.style.display = 'none';
+    dom.btnStop.style.display = 'flex';
     const streamEl = createStreamingMessage();
 
     try {
@@ -2126,13 +2233,20 @@ async function sendMessage() {
         const body = { 
             model: modelName, 
             messages: msgs, 
-            max_tokens: state.settings.maxTokens, 
-            temperature: state.settings.temperature,
-            top_p: state.settings.topP ?? 1.0,
-            repeat_penalty: state.settings.repetitionPenalty ?? 1.0,
+            max_tokens: state.settings.max_tokens || 4096, 
+            temperature: state.settings.temperature || 0.7,
+            top_p: state.settings.top_p ?? 1.0,
+            top_n: state.settings.top_n || undefined,
+            frequency_penalty: state.settings.frequency_penalty || 0.0,
+            presence_penalty: state.settings.presence_penalty || 0.0,
             stop: stopTokens,
             stream: true 
         };
+        
+        // Only include additional params if they're set
+        if (state.settings.seed !== null && state.settings.seed !== undefined) body.seed = parseInt(state.settings.seed);
+        if (state.settings.response_format) body.response_format = state.settings.response_format;
+        if (state.settings.logit_bias) body.logit_bias = state.settings.logit_bias;
 
         const enabledTools = state.settings.mcpTools.filter(t => state.settings.mcpEnabled[t.name] !== false);
         if (state.settings.mcpEndpoint && enabledTools.length) {
@@ -2166,6 +2280,7 @@ async function sendMessage() {
         saveState();
         if (conv.messages.length === 2) { conv.title = input.substring(0, 50) + (input.length > 50 ? '...' : ''); saveState(); renderConversationsList(); }
         finalizeStreamingMessage(streamEl, full, meta, conv.messages.length - 1);
+        updateContextProgress();
 
     } catch (e) {
         if (e.name === 'AbortError') {
@@ -2175,7 +2290,10 @@ async function sendMessage() {
         }
     } finally {
         state.isStreaming = false; state.abortController = null;
-        dom.btnSend.disabled = false; dom.messageInput.focus();
+        dom.btnSend.disabled = false;
+        dom.btnSend.style.display = 'flex';
+        dom.btnStop.style.display = 'none';
+        dom.messageInput.focus();
     }
 }
 
@@ -2212,6 +2330,36 @@ function scrollToBottom() { requestAnimationFrame(() => dom.messagesScroll.scrol
 function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 function copyCode(btn, enc) { navigator.clipboard.writeText(decodeURIComponent(atob(enc))).then(() => { btn.innerHTML = '✓ Copié'; setTimeout(() => { btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg> Copier'; }, 2000); }); }
 function copyMessageContent(i) { const c = getActiveConversation(); if (c?.messages[i]) navigator.clipboard.writeText(c.messages[i].content); }
+
+function updateContextProgress() {
+    const conv = getActiveConversation();
+    if (!conv || !conv.messages?.length) {
+        if (dom.contextProgress) dom.contextProgress.style.display = 'none';
+        return;
+    }
+    
+    const maxCtx = state.inferenceConfig.ctx || 8192;
+    const tokens = estimateTokens(conv.messages.map(m => m.content).join(' '));
+    const percent = Math.min(100, (tokens / maxCtx) * 100);
+    
+    if (dom.contextProgress) {
+        dom.contextProgress.style.display = 'flex';
+        if (dom.contextProgressFill) {
+            dom.contextProgressFill.style.width = percent.toFixed(1) + '%';
+            dom.contextProgressFill.className = 'context-progress-fill';
+            if (percent > 80) dom.contextProgressFill.classList.add('warning');
+            if (percent > 95) dom.contextProgressFill.classList.add('danger');
+        }
+        if (dom.contextProgressText) {
+            const ctxLabel = maxCtx >= 1000 ? (maxCtx / 1000) + 'k' : maxCtx;
+            dom.contextProgressText.textContent = `${tokens.toLocaleString()} / ${ctxLabel} tokens`;
+        }
+    }
+}
+
+function estimateTokens(text) {
+    return Math.ceil(text.length / 4);
+}
 
 window.copyCode = copyCode;
 window.deleteConversation = deleteConversation;
@@ -2250,6 +2398,7 @@ function bindInferenceEvents() {
             chips.forEach(c => c.classList.remove('active'));
             chip.classList.add('active');
             state.inferenceConfig.ctx = parseInt(chip.dataset.val);
+            updateContextProgress();
         };
     });
 
@@ -2282,6 +2431,21 @@ function bindInferenceEvents() {
     }
     if (dom['option_chat_format']) {
         dom['option_chat_format'].onchange = (e) => state.inferenceConfig.chat_format = e.target.value;
+    }
+    
+    // Tuning options
+    if (dom['option_tune']) {
+        dom['option_tune'].onchange = (e) => {
+            state.inferenceConfig.tune = e.target.checked;
+            const tuneOptions = document.getElementById('tune-options');
+            if (tuneOptions) tuneOptions.style.display = e.target.checked ? 'block' : 'none';
+        };
+    }
+    if (dom['option_trials']) {
+        dom['option_trials'].onchange = (e) => state.inferenceConfig.trials = parseInt(e.target.value);
+    }
+    if (dom['option_metric']) {
+        dom['option_metric'].onchange = (e) => state.inferenceConfig.metric = e.target.value;
     }
 
     if (dom['btn_start_serve']) {

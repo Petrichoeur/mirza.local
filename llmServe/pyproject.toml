@@ -21,6 +21,10 @@ dependencies = [
 metrics = [
     "prometheus-client>=0.21.1",
 ]
+# Auto-tuning for llama.cpp parameters
+tune = [
+    "llama-optimus>=0.1.7",
+]
 
 [build-system]
 requires = ["hatchling"]

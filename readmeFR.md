@@ -1,5 +1,7 @@
 # Mirza — Station d'Inférence IA Locale sur Apple Silicon
 
+![Logo Mirza](mirzalogo.jpeg)
+
 > Transformez un Mac Mini (ou n'importe quel Mac Apple Silicon) en serveur d'inférence IA dédié, sans écran.  
 > Piloté entièrement depuis une machine Linux distante via CLI et une WebUI complète.  
 > Aucun cloud. Aucune clé API. Aucun écran nécessaire. Juste SSH, mémoire unifiée et accélération Metal.
@@ -24,6 +26,7 @@
 - [Configuration d'inférence](#configuration-dinférence)
 - [Emplacements des fichiers clés](#emplacements-des-fichiers-clés)
 - [Dépannage](#dépannage)
+- [Pourquoi le nom ? Pourquoi Mirza ?](#pourquoi-le-nom--pourquoi-mirza-)
 - [Feuille de route](#feuille-de-route)
 - [Licence](#licence)
 
@@ -249,6 +252,8 @@ Tous les services démarrent automatiquement après chaque reboot via des entré
 - Direct : `http://mirza.local:3000`
 - Via WebUI : l'onglet Monitoring intègre Grafana en mode kiosque via iframe
 
+![Monitoring Grafana](grafanamonitoring.png)
+
 ---
 
 ## Phase 6 — Inférence IA (Llama.cpp / GGUF)
@@ -328,11 +333,22 @@ mirza stop-ui
 | Onglet | Description |
 |--------|-------------|
 | **Dashboard** | Statut serveur (en ligne/hors ligne), infos matérielles (puce, CPU, GPU, RAM), modèle actif, boutons d'action rapide (Réveil, Stop LLM, Veille, Redémarrage), logs LLM en direct |
-| **Chat** | Interface de chat complète avec streaming. Multi-fournisseurs (LLM local, OpenAI, Anthropic, Groq, Mistral, Ollama). Historique de conversations, intégration outils MCP |
-| **Modèles** | Catalogue en direct depuis `ggml-org` sur HuggingFace. Badges de capacités (MoE, Vision, Audio, Embedding, Tools, Long Context, Code, Raisonnement). Filtres RAM/famille/catégorie, Top 10 recommandations, barre de progression téléchargement |
+| **Chat** | Interface de chat complète avec streaming. Multi-fournisseurs (LLM local, OpenAI, Anthropic, Groq, Mistral, Ollama). Historique de conversations, intégration outils MCP. Paramètres : temperature, top-p, prompt système, max tokens. |
+| **Modèles** | Catalogue en direct depuis `ggml-org` sur HuggingFace. Badges de capacités (MoE, Vision, Audio, Embedding, Tools, Long Context, Code, Raisonnement). Filtres RAM/famille/catégorie, Top 10 recommandations, barre de progression télécharger |
+
+![Catalogue Modèles](modelcatalog.png)
+
+![Exemple Chat](chat-exemple.png)
+
+![Paramètres du Chat](settinghyperparameters.png)
 | **Config** | Affiche le contenu de `mirza.conf`. Bouton "Actualiser" pour ré-exécuter `gen_config.sh` à distance |
+
+![Configuration](configuration.png)
+
 | **Monitoring** | Dashboard Grafana intégré en mode kiosque via iframe |
 | **Documentation** | Guide d'utilisation intégré |
+
+![Vue Dashboard](dashboardpage.png)
 
 ### Catalogue de modèles — Fonctionnement
 
@@ -375,6 +391,8 @@ En cliquant "▶ Servir" sur une carte modèle, une fenêtre modale s'ouvre avec
 
 Toutes les commandes utilisent le format `mirza <commande> [options]`.
 
+![CLI Mirza](mirzash.png)
+
 ### Gestion du serveur
 
 | Commande | Description |
@@ -395,6 +413,8 @@ Toutes les commandes utilisent le format `mirza <commande> [options]`.
 | `mirza serve [options]` | Lancer le serveur d'inférence llama.cpp |
 | `mirza stop-llm` | Tuer le serveur d'inférence (`pkill -f llama_cpp.server`) |
 | `mirza chat` | Chat interactif en terminal (multi-tours, historique de conversation) |
+
+![Modèles Installés](installedmodels.png)
 
 #### Options de `mirza serve`
 
@@ -453,6 +473,16 @@ Le backend WebUI (`webui/server.py`) tourne sur le port 3333 et expose :
 ### Flash Attention
 
 Activé par défaut. Réduit drastiquement l'empreinte mémoire du KV cache lors de longs contextes. Toujours conseillé sur Apple Silicon (accéléré Metal).
+
+### Paramètres d'inférence
+
+En cliquant sur "▶ Servir" sur une fiche modèle, une modale s'ouvre avec :
+
+| Paramètre | Options | Défaut |
+|-----------|---------|--------|
+| **Fenêtre de contexte (n_ctx)** | 2k / 4k / 8k / 16k / 32k / 128k | 8k |
+| **Quantification KV Cache** | F16 (précision max), Q8_0 (recommandé), Q4_0 (économie max) | Q8_0 |
+| **Flash Attention** | On/Off | On |
 
 ### Fenêtre de contexte
 
@@ -564,28 +594,108 @@ Vérifier dans Grafana la pression mémoire. Si l'utilisation RAM dépasse 90%, 
 
 ---
 
-## Feuille de route
+## Configuration : Connecter Votre Mac
 
-- [x] CLI complet pour la gestion distante du Mac (16 commandes)
-- [x] Stack monitoring : Grafana + Prometheus + Macmon (métriques Apple Silicon)
-- [x] API d'inférence OpenAI-compatible via llama-cpp-python + Metal
-- [x] WebUI : Dashboard, Chat, Modèles, Config, Monitoring, Docs
-- [x] Catalogue de modèles en temps réel depuis HuggingFace (organisation `ggml-org`)
-- [x] Recommandations de modèles adaptées au matériel avec estimation tokens/s
-- [x] Badges de capacités riches : MoE, Vision, Audio, Embedding, Tools, Long Context
-- [x] Configuration d'inférence avancée : n_ctx, quantification KV cache, Flash Attention
-- [x] Barre de progression de téléchargement en temps réel
-- [x] Support du token HuggingFace pour les modèles gated (protégés)
-- [x] Suppression de modèles depuis le CLI et la WebUI
-- [x] Arrêt automatique du serveur précédent avant chaque nouveau démarrage
-- [ ] Intégration serveur MCP pour les workflows agentiques (filesystem, recherche web, exécution de code)
-- [ ] Serving multi-modèles (plusieurs modèles sur différents ports simultanément)
-- [ ] Harness de benchmarking cross-chip (M1 → M4 Ultra)
-- [ ] Intégration TurboQuant pour la quantification post-entraînement
-- [ ] Export de conversations (Markdown, JSON)
+Cette section explique comment configurer votre Mac Apple Silicon pour fonctionner avec Mirza.
+
+### Configuration Réseau
+
+1. **Connectez-vous en Ethernet** : Utilisez une connexion filaire (CAT6 recommandée) pour une stabilité maximale
+2. **Attribuez un bail DHCP statique** : Dans l'interface admin de votre routeur, assignez une IP statique à l'adresse MAC Ethernet de votre Mac
+3. **Vérifiez le hostname** : Assurez-vous que votre Mac est accessible via `mirza.local` (ou mettez à jour `MIRZA_HOST`)
+
+### Configuration SSH
+
+```bash
+# Sur votre Mac, activez SSH :
+# Réglages Système → Général → Partage → Connexion à distance
+
+# Ajoutez votre clé SSH publique sur le Mac :
+ssh-copy-id votre_nom_utilisateur@mirza.local
+```
+
+### Variables d'Environnement
+
+Mirza nécessite ces variables sur votre **client Linux** :
+
+```bash
+export MIRZA_HOST=mirza.local        # Hostname ou IP du Mac
+export MIRZA_USER=votre_nom_utilisateur  # Nom d'utilisateur SSH sur le Mac
+export MIRZA_MAC_ADDRESS=xx:xx:xx:xx:xx:xx  # Pour Wake-on-LAN
+```
+
+### Test de Première Connexion
+
+```bash
+# Tester la connexion SSH
+ssh votre_nom_utilisateur@mirza.local
+
+# Si ça fonctionne, lancez la configuration
+mirza config --refresh
+```
+
+---
+
+## C'est Quoi Ce Bordel de Code ?
+
+*Confessions d'un hobbyiste qui a couru avant de savoir marcher*
+
+### L'Histoire du Projet
+
+Ce projet a commencé comme une façon d'éviter de payer OpenAI 20$/mois pour l'accès API.
+Ça a évolué en une station d'inférence IA locale qui ferait pleurer Geoffrey Hinton 
+de joie — ou d'horreur. On n'est pas sûr.
+
+### Les Chroniques du Vibe Code
+
+Mirza c'est ce qui arrive quand un ingénieur MLOps rencontre un Mac Apple Silicon 24GB 
+à 2h du mat' et se dit "et si je fais tourner toute l'IA en local ?"
+
+- **Frontend** : ~90% généré par **MiniMax2.5** — l'IA qui comprend vraiment que 
+  "fait-le pop" et "corrige l'espacement" veut dire en fait "utilise les variables CSS correctement et ne code pas les couleurs hex en dur"
+- **Backend** : ~10% vibe-codé par **Petrichoeur** (Florian Bobo — AI & MLOps Engineer) — 
+  Mostly à 2h du mat', avec beaucoup de café et des décisions de vie questionnables
+- **Optimisation VRAM** : Appris à la dure que Metal préfère être nourri correctement, 
+  et que `n_ubatch` ce n'est pas juste un générateur de nombres aléatoires
+
+### Remerciements
+
+- **MiniMax2.5** : Pour avoir compris que "fait-le professionnel" veut vraiment dire 
+  "utilise les variables CSS correctement et ne mets pas de styles inline partout"
+- **Apple Silicon** : Pour nous faire croire que 24GB c'est assez (c'est jamais assez)
+- **Llama.cpp** : Pour être la seule librairie qui nécessite pas un Doctorat en CUDA 
+  pour faire tourner localement sur du matériel grand public
+- **La Communauté** : Pour nous inspirer à garder l'optimisation, bidouiller et casser des choses 
+  de nouvelles façons créatives
+
+### Avertissement
+
+Si votre Mac commence à ressembler à un moteur d'avion, c'est normal.
+Si votre femme demande pourquoi vous faites tourner un modèle 8B sur un laptop
+au lieu de sortir, c'est entre vous et votre thérapeute.
+
+---
+
+## Pourquoi le nom ? Pourquoi Mirza ?
+
+Le nom **Mirza** est un hommage à **Maryam Mirzakhani** (1977–2017), la brillante mathématicienne iranienne devenue la première femme—et premier iranienne—à recevoir la **Médaille Fields**, souvent décrite comme le "Prix Nobel des mathématiques".
+
+Elle a apporté des contributions révolutionnaires à la géométrie des espaces courbes, aux systèmes dynamiques et aux mathématiques du billard. Son travail a reconfiguré notre compréhension des formes complexes et des espaces entre elles.
+
+Alors pourquoi nommer un serveur d'inférence IA après elle ? Parce que le domaine de l'IA—les modèles open-source surtout—a été envahie par des noms comme **Llama**, **Mistral**, **GPT**, **BERT**, **Falcon**, et d'innombrables variations de "codées au masculin". C'est 2026, et somehow we're still surprised quand un modèle ou un projet porte un nom de femme.
+
+Mirza est ici pour se tenir aux côtés des LLaMAs et des Mistrals—pas pour les remplacer, mais pour nous rappeler que les contributions des femmes à la science, aux mathématiques et à la technologie méritent tout autant de place sur l'étagère. Maryam Mirzakhani a changé le monde des mathématiques. Ce petit serveur ne fait que tourner de l'inférence sur Apple Silicon.
+
+Peut-être que le prochain grand modèle portera aussi un nom de femme. D'ici là, Mirza perpétue le souvenir.
 
 ---
 
 ## Licence
 
 GPLv3. Copiez-le, forkez-le, modifiez-le. Gardez-le ouvert.
+
+---
+
+## P.S.
+
+Hey, it's awesome right?
