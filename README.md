@@ -338,20 +338,16 @@ mirza stop-ui
 |-----|-------------|
 | **Dashboard** | Server status (online/offline), hardware info (chip, CPU, GPU, RAM), active model, quick action buttons (Wake, Stop LLM, Sleep, Reboot), live LLM logs |
 | **Chat** | Full streaming chat interface. Multi-provider (local LLM, OpenAI, Anthropic, Groq, Mistral, Ollama). Conversation history, MCP tool integration. Settings for temperature, top-p, system prompt, max tokens. |
+| **Models** | Live catalog from `ggml-org` on HuggingFace. Capability badges (MoE, Vision, Audio, Embedding, Tools, Long Context, Code, Reasoning). RAM filtering, family/category filters, Top 10 recommendations, download progress bar |
+| **Config** | Displays `mirza.conf` contents. "Refresh" button re-runs `gen_config.sh` remotely |
+| **Monitoring** | Grafana dashboard embedded in kiosk mode via iframe |
+| **Documentation** | Built-in usage guide | 
+
 
 ![Chat Example](chat-exemple.png)
-
-![Chat Settings](settinghyperparameters.png)
-
-| **Models** | Live catalog from `ggml-org` on HuggingFace. Capability badges (MoE, Vision, Audio, Embedding, Tools, Long Context, Code, Reasoning). RAM filtering, family/category filters, Top 10 recommendations, download progress bar |
-
 ![Model Catalog](modelcatalog.png)
-| **Config** | Displays `mirza.conf` contents. "Refresh" button re-runs `gen_config.sh` remotely |
-
+![Chat Settings](settinghyperparameters.png)
 ![Configuration](configuration.png)
-| **Monitoring** | Grafana dashboard embedded in kiosk mode via iframe |
-| **Documentation** | Built-in usage guide |
-
 
 
 ### Model Catalog — How It Works
