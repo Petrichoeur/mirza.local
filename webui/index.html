@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MirzAI — Station Control Panel</title>
+    <meta name="description" content="Full control panel for Mirza — your local Apple Silicon AI inference station.">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11/build/highlight.min.js"></script>
+
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- ═══════════════════ SIDEBAR ═══════════════════ -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">
+                <span class="logo-icon">◈</span>
+                <span class="logo-text">Mirz</span>
+                <span class="logo-badge">AI</span>
+            </div>
+        </div>
+
+        <!-- Navigation principale -->
+        <nav class="sidebar-nav">
+            <button class="nav-item active" data-view="dashboard" id="nav-dashboard">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                Dashboard
+            </button>
+            <button class="nav-item" data-view="chat" id="nav-chat">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                Chat
+            </button>
+            <button class="nav-item" data-view="models" id="nav-models">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                Models
+            </button>
+            <button class="nav-item" data-view="config" id="nav-config">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                Config
+            </button>
+            <button class="nav-item" data-view="monitoring" id="nav-monitoring">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                Monitoring
+            </button>
+            <button class="nav-item" data-view="docs" id="nav-docs">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+                Docs
+            </button>
+        </nav>
+
+        <!-- Chat: conversations list -->
+        <div class="sidebar-conversations" id="sidebar-conversations" style="display:none;">
+            <button class="btn-new-conversation" id="btn-new-chat">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                Nouvelle conversation
+            </button>
+            <div class="sidebar-section-label">Conversations</div>
+            <div id="conversations-list" class="conversations-list"></div>
+        </div>
+
+        <!-- Chat: provider + model selectors -->
+        <div class="sidebar-footer" id="sidebar-footer-chat" style="display:none;">
+            <div class="provider-selector">
+                <label for="provider-select">Provider</label>
+                <div class="provider-row">
+                    <select id="provider-select" class="select-provider"></select>
+                    <div class="server-status-inline"><div class="status-dot" id="provider-status-dot"></div></div>
+                </div>
+            </div>
+            <div class="model-selector">
+                <label for="model-select">Model</label>
+                <select id="model-select" class="select-model"><option value="">—</option></select>
+            </div>
+        </div>
+
+        <!-- Global footer -->
+        <div class="sidebar-footer" id="sidebar-footer-global">
+            <div class="sidebar-links">
+                <button class="sidebar-link nav-item" id="link-grafana" data-view="monitoring">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                    Monitoring
+                </button>
+                <button class="sidebar-link" id="btn-settings">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                    Settings
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Mobile toggle -->
+    <button class="sidebar-toggle" id="sidebar-toggle">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12h18M3 6h18M3 18h18"/></svg>
+    </button>
+
+    <!-- ═══════════════════ MAIN CONTENT ═══════════════════ -->
+    <main class="main-content" id="main-content">
+
+        <!-- ═══ VIEW: DASHBOARD ═══ -->
+        <div class="view active" id="view-dashboard">
+            <div class="view-header">
+                <h1>Dashboard</h1>
+                <button class="btn-secondary" id="btn-refresh-status">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+                    Refresh
+                </button>
+            </div>
+
+            <!-- Status cards row -->
+            <div class="dashboard-grid" id="dashboard-grid">
+                <!-- Server status card -->
+                <div class="dash-card dash-card-wide">
+                    <div class="dash-card-header">
+                        <span class="dash-card-icon"></span>
+                        <h3>Server Station</h3>
+                        <div class="status-pill" id="dash-server-status">
+                            <div class="status-dot loading"></div>
+                            <span>Checking...</span>
+                        </div>
+                    </div>
+                    <div class="dash-card-body" id="dash-server-info">
+                        <div class="dash-info-row"><span class="dash-label">Host</span><span class="dash-value" id="dash-host">—</span></div>
+                        <div class="dash-info-row">
+                            <span class="dash-label">IP</span>
+                            <span class="dash-value" style="display: flex; align-items: center; gap: 8px;">
+                                <span id="dash-ip" data-value="—" class="obscured-ip">••••••••••••</span>
+                                <button id="toggle-ip-btn" class="btn-icon btn-icon-sm" title="Show/Hide IP" style="margin: 0; padding: 2px;">
+                                    <svg id="eye-icon-closed" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.93A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24M1 1l22 22"/></svg>
+                                    <svg id="eye-icon-open" style="display:none;" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                                </button>
+                            </span>
+                        </div>
+                        <div class="dash-info-row"><span class="dash-label">Llama.cpp API</span><span class="dash-value" id="dash-api">—</span></div>
+                        <div class="dash-info-row"><span class="dash-label">Grafana</span><span class="dash-value" id="dash-grafana">—</span></div>
+                    </div>
+                </div>
+
+                <!-- Hardware card -->
+                <div class="dash-card">
+                    <div class="dash-card-header">
+                        <span class="dash-card-icon">⚙️</span>
+                        <h3>Hardware</h3>
+                    </div>
+                    <div class="dash-card-body" id="dash-hardware-info">
+                        <div class="dash-info-row"><span class="dash-label">Chip</span><span class="dash-value" id="dash-chip">—</span></div>
+                        <div class="dash-info-row"><span class="dash-label">CPU</span><span class="dash-value" id="dash-cpu">—</span></div>
+                        <div class="dash-info-row"><span class="dash-label">GPU</span><span class="dash-value" id="dash-gpu">—</span></div>
+                        <div class="dash-info-row"><span class="dash-label">RAM</span><span class="dash-value" id="dash-ram">—</span></div>
+                    </div>
+                </div>
+
+                <!-- Active model card -->
+                <div class="dash-card">
+                    <div class="dash-card-header">
+                        <span class="dash-card-icon">🧠</span>
+                        <h3>Active Model</h3>
+                    </div>
+                    <div class="dash-card-body">
+                        <div style="display: flex; align-items: flex-start; justify-content: space-between; gap: 8px;">
+                            <div class="dash-model-name" id="dash-model-name">None</div>
+                            <div id="dash-metal-badge" style="display: none; font-size: 0.65rem; padding: 2px 6px; background: rgba(52, 211, 153, 0.1); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.2); border-radius: 4px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 4px;">Metal</div>
+                        </div>
+                        <div class="dash-model-sub" id="dash-model-sub">Server Stopped</div>
+                        
+                        <!-- VRAM Monitoring Breakdown -->
+                        <div id="vram-monitor" style="display:none; margin-top: 15px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 12px;">
+                            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; margin-bottom: 6px; color: var(--text-muted);">
+                                <span>VRAM Allocation</span>
+                                <span id="vram-total-value">0.0 GB</span>
+                            </div>
+                            <div class="vram-bar-container" style="height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; display: flex; overflow: hidden; margin-bottom: 8px;">
+                                <div id="vram-bar-weights" style="width: 0%; background: var(--color-primary); transition: width 0.3s;"></div>
+                                <div id="vram-bar-kv" style="width: 0%; background: #fbbf24; transition: width 0.3s;"></div>
+                                <div id="vram-bar-compute" style="width: 0%; background: #a78bfa; transition: width 0.3s;"></div>
+                            </div>
+                            <div style="display: flex; gap: 12px; font-size: 0.65rem; color: var(--text-muted);">
+                                <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; background: var(--color-primary); border-radius: 2px;"></div> <span id="vram-lbl-weights">Weights</span></div>
+                                <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; background: #fbbf24; border-radius: 2px;"></div> <span id="vram-lbl-kv">KV Cache</span></div>
+                                <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 8px; height: 8px; background: #a78bfa; border-radius: 2px;"></div> <span id="vram-lbl-compute">Compute</span></div>
+                            </div>
+                            <div id="vram-os-ram" style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--text-muted); margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.05);">
+                                <span>Total RAM Used</span>
+                                <span id="vram-total-ram-value">—</span>
+                            </div>
+                            <div id="vram-os-ram-sys" style="display: flex; justify-content: space-between; font-size: 0.65rem; color: var(--text-muted); margin-top: 4px;">
+                                <span>OS RAM Used</span>
+                                <span id="vram-os-ram-sys-value">—</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dash-section">
+                <h2>Quick Actions</h2>
+                <div class="dash-actions">
+                    <button class="action-btn" id="action-wake" title="Wake on LAN">
+                        <span class="action-icon">⏻</span>
+                        <span class="action-label">Wake Up</span>
+                        <span class="action-hint">mirza start</span>
+                    </button>
+                    <button class="action-btn" id="action-stop-llm" title="Stop Inference Server">
+                        <i class="fas fa-stop-circle"></i>
+                        <span>Stop LLM</span>
+                        <span class="action-hint">mirza stop-llm</span>
+                    </button>
+                    <button class="action-btn" id="action-sleep" title="Put System to Sleep">
+                        <span class="action-icon">☾</span>
+                        <span class="action-label">Sleep</span>
+                        <span class="action-hint">mirza sleep</span>
+                    </button>
+                    <button class="action-btn action-btn-danger" id="action-reboot" title="Restart System">
+                        <span class="action-icon">↻</span>
+                        <span class="action-label">Reboot</span>
+                        <span class="action-hint">mirza reboot</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Active Download Widget -->
+            <div class="dash-section" id="dash-section-download" style="display: none;">
+                <div class="dash-section-header">
+                    <h2>Active Download Activity</h2>
+                    <div id="dash-download-spinner" class="spinner" style="width: 16px; height: 16px; margin: 0;"></div>
+                </div>
+                <div class="dash-card" style="padding: 1.25rem; background: rgba(251, 191, 36, 0.05); border: 1px solid rgba(251, 191, 36, 0.2);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                        <span id="dash-download-label" style="font-size: 0.85rem; font-weight: 600; color: var(--color-warning);">Initializing...</span>
+                        <span id="dash-download-percent" style="font-size: 0.85rem; font-weight: 700; color: var(--color-warning);">0%</span>
+                    </div>
+                    <div class="progress-container" style="height: 10px; background: rgba(255,255,255,0.05); border-radius: 5px; overflow: hidden; margin-bottom: 1rem;">
+                        <div id="dash-download-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #fbbf24, #f59e0b); transition: width 0.3s ease;"></div>
+                    </div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600;">Deployment Logs</div>
+                    <pre id="dash-download-logs" class="log-output" style="max-height: 250px; min-height: 100px; background: #0c0e14; font-size: 0.75rem; border-color: rgba(251, 191, 36, 0.15); color: #fbbf24;">Waiting for logs...</pre>
+                </div>
+            </div>
+
+            <!-- Inference Logs Llama.cpp -->
+            <div class="dash-section">
+                <div class="dash-section-header">
+                    <h2>Inference Logs (Llama.cpp)</h2>
+                    <div style="display: flex; gap: 8px; align-items: center;">
+                        <label style="font-size: 0.75rem; color: var(--text-muted); display: flex; align-items: center; gap: 4px; cursor: pointer; user-select: none;">
+                            <input type="checkbox" id="check-auto-logs" style="width: 12px; height: 12px; accent-color: var(--color-primary);"> Auto
+                        </label>
+                        <button class="btn-icon btn-icon-sm" id="btn-clear-logs" title="Clear display" style="opacity:0.6;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                        </button>
+                        <button class="btn-icon btn-icon-sm" id="btn-refresh-logs" title="Refresh">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <pre class="log-output" id="dash-logs" style="font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.78rem; background: #080b10; border: 1px solid rgba(99,102,241,0.2); color: #c9d1d9; max-height: 480px; min-height: 180px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; padding: 14px;">Click to load logs...</pre>
+            </div>
+        </div>
+
+        <!-- ═══ VIEW: CHAT ═══ -->
+        <div class="view" id="view-chat">
+            <div class="welcome-screen" id="welcome-screen">
+                <div class="welcome-logo">◈</div>
+                <h1>MirzAI</h1>
+                <p class="welcome-subtitle">Votre station d'IA locale sur Apple Silicon</p>
+                <div class="welcome-suggestions">
+                    <button class="suggestion-chip" data-prompt="Explique-moi comment fonctionne le machine learning en termes simples.">
+                        <span class="chip-icon"></span>Expliquer le ML simplement
+                    </button>
+                    <button class="suggestion-chip" data-prompt="Écris un script Python qui analyse un fichier CSV et génère un graphique.">
+                        <span class="chip-icon"></span>Script Python pour CSV
+                    </button>
+                    <button class="suggestion-chip" data-prompt="Quels sont les avantages de l'inférence IA locale par rapport au cloud ?">
+                        <span class="chip-icon"></span>IA locale vs Cloud
+                    </button>
+                    <button class="suggestion-chip" data-prompt="Rédige un email professionnel pour proposer une collaboration sur un projet open-source.">
+                        <span class="chip-icon">✉️</span>Email professionnel
+                    </button>
+                </div>
+            </div>
+            <div class="messages-container" id="messages-container">
+                <div class="messages-scroll" id="messages-scroll"></div>
+            </div>
+            <div class="input-area" id="input-area">
+                <div class="input-wrapper">
+                    <textarea id="message-input" class="message-input" placeholder="Envoyer un message à MirzAI..." rows="1" autofocus></textarea>
+                    <div class="input-actions">
+                        <span class="token-counter" id="token-counter"></span>
+                        <button class="btn-stop" id="btn-stop" title="Arrêter la génération" style="display: none;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
+                        </button>
+                        <button class="btn-send" id="btn-send" title="Envoyer">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="context-progress" id="context-progress" style="display: none;">
+                    <div class="context-progress-bar">
+                        <div class="context-progress-fill" id="context-progress-fill"></div>
+                    </div>
+                    <span class="context-progress-text" id="context-progress-text">0 / 8k tokens</span>
+                </div>
+                <div class="input-footer"><span class="input-hint">Entrée pour envoyer · Shift+Entrée pour un saut de ligne</span></div>
+            </div>
+        </div>
+
+        <!-- ═══ VIEW: MODELS ═══ -->
+        <div class="view" id="view-models">
+            <div class="view-header" style="flex-direction: column; align-items: stretch; gap: 1rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h1>Model Catalog</h1>
+                    <div class="models-tabs" style="display: flex; gap: 0.5rem; background: var(--bg-hover); padding: 0.25rem; border-radius: 8px;">
+                        <style>
+                            .tab-item.active { background: rgba(147, 51, 234, 0.1) !important; color: var(--color-primary) !important; font-weight: 500; }
+                            .tab-item:hover:not(.active) { color: var(--text-color) !important; }
+                        </style>
+                        <button class="tab-item active" id="tab-models-all" style="padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; border: none; background: transparent; color: var(--text-muted); transition: all 0.2s;">Cloud Catalog</button>
+                        <button class="tab-item" id="tab-models-installed" style="padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; border: none; background: transparent; color: var(--text-muted); transition: all 0.2s;">Installed</button>
+                        <button class="tab-item" id="tab-models-top10" style="padding: 0.5rem 1rem; border-radius: 6px; cursor: pointer; border: none; background: transparent; color: var(--text-muted); transition: all 0.2s;">⭐ Top 10 Mirza</button>
+                    </div>
+                </div>
+                <!-- Org selector + model count -->
+                <style>
+                    .org-chip {
+                        display: inline-flex; align-items: center; gap: 5px;
+                        padding: 5px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: 600;
+                        cursor: pointer; border: 1.5px solid var(--color-border);
+                        background: transparent; color: var(--text-muted);
+                        transition: all 0.18s ease; white-space: nowrap;
+                    }
+                    .org-chip:hover { border-color: var(--color-primary); color: var(--text-color); }
+                    .org-chip.active {
+                        background: rgba(147,51,234,0.12); border-color: var(--color-primary);
+                        color: var(--color-primary);
+                    }
+                    .org-chip[data-org="ggml-org"].active { border-color: #38bdf8; color: #38bdf8; background: rgba(56,189,248,0.1); }
+                    .org-chip[data-org="unsloth"].active  { border-color: #fb923c; color: #fb923c; background: rgba(251,146,60,0.1); }
+                </style>
+                <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 0 2px;">
+                    <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Source</span>
+                    <div id="org-selector" style="display: flex; gap: 6px; flex-wrap: wrap;">
+                        <button class="org-chip active" data-org="ggml-org" id="org-ggml" title="Official llama.cpp quantizations by the ggml team">
+                            🧊 ggml-org
+                        </button>
+                        <button class="org-chip" data-org="unsloth" id="org-unsloth" title="Dynamic quantizations by Unsloth AI — often more recent and varied">
+                            🦥 unsloth
+                        </button>
+                    </div>
+                    <span id="catalog-model-count" style="font-size: 0.72rem; color: var(--text-muted);"></span>
+                </div>
+
+                <!-- Filters row -->
+                <div class="models-filters" style="display: flex; gap: 1rem; margin-top: 0.25rem; align-items: flex-end; flex-wrap: wrap;">
+                    <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Search</span>
+                        <input type="text" id="filter-search" placeholder="🔍 Name, repo..." class="select-filter" style="padding: 0.5rem 1rem; cursor: text;">
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Family</span>
+                        <select id="filter-family" class="select-filter" style="width: auto;">
+                            <option value="">All families</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Category</span>
+                        <select id="filter-category" class="select-filter" style="width: auto;">
+                            <option value="">All categories</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">RAM Required</span>
+                        <select id="filter-ram" class="select-filter" style="width: auto;">
+                            <option value="">All RAM</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Context</span>
+                        <select id="filter-context" class="select-filter" style="width: auto;" title="Max context window — recalculates KV cache RAM">
+                            <option value="512">512 tokens</option>
+                            <option value="1024">1 024 tokens</option>
+                            <option value="2048">2 048 tokens</option>
+                            <option value="4096">4 096 tokens</option>
+                            <option value="8192" selected>8 192 tokens (default)</option>
+                            <option value="16384">16 384 tokens</option>
+                            <option value="32768">32 768 tokens</option>
+                            <option value="65536">65 536 tokens</option>
+                            <option value="131072">128k tokens</option>
+                        </select>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Sort By</span>
+                        <select id="filter-sort" class="select-filter" style="width: auto;">
+                            <option value="">Default</option>
+                            <option value="toks">Speed (tok/s) ↓</option>
+                            <option value="size_desc">Size (GB) ↓</option>
+                            <option value="size_asc">Size (GB) ↑</option>
+                            <option value="downloads">Downloads ↓</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- 🚀 Inference Settings -->
+                <div class="perf-settings" style="display: flex; gap: 1rem; margin-top: 1rem; padding: 0.75rem; background: rgba(59, 130, 246, 0.05); border: 1px border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.1); align-items: center;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 1.2rem;">🚀</span>
+                        <span style="font-size: 0.85rem; font-weight: 600; color: #60a5fa;">Inference :</span>
+                    </div>
+                    <div style="display: flex; gap: 1.5rem; flex: 1; flex-wrap: wrap;">
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">KV Cache:</span>
+                            <select id="perf-kv-cache" class="select-filter" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; background: var(--bg-card);">
+                                <option value="">Default (f16)</option>
+                                <option value="int8">Optimized (Q8_0)</option>
+                                <option value="int4">Compact (Q4_0)</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 0.75rem; color: var(--text-muted); font-weight: 500;">Batch Size:</span>
+                            <select id="perf-prefill-step" class="select-filter" style="padding: 0.25rem 0.5rem; font-size: 0.8rem; background: var(--bg-card);">
+                                <option value="">Auto</option>
+                                <option value="512">Eco (512)</option>
+                                <option value="1024">Standard (1024)</option>
+                                <option value="2048">Performance (2048)</option>
+                            </select>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 12px; margin-left: auto;">
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--text-muted); cursor: help;" title="Automatic KV cache optimization for Apple Silicon">
+                                <span style="color: var(--color-success)">●</span> Paged Attention
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--text-muted); cursor: help;" title="Flash Attention hardware acceleration enabled">
+                                <span style="color: var(--color-success)">●</span> Flash Attention
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="models-grid" id="models-grid">
+                <div class="mcp-empty">Loading catalog...</div>
+            </div>
+        </div>
+
+        <!-- ═══ VIEW: CONFIG ═══ -->
+        <div class="view" id="view-config">
+            <div class="view-header">
+                <h1>Configuration</h1>
+                <button class="btn-secondary" id="btn-refresh-config">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+                    Regenerate (SSH)
+                </button>
+            </div>
+            <div class="config-container" id="config-container">
+                <div class="mcp-empty">Loading configuration...</div>
+            </div>
+        </div>
+        <!-- ═══ VIEW: MONITORING ═══ -->
+        <div class="view" id="view-monitoring">
+            <div class="view-header">
+                <h1>Grafana (Monitoring)</h1>
+                <button class="btn-secondary" onclick="document.getElementById('grafana-iframe').src += ''">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 4v6h6M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
+                    Refresh
+                </button>
+            </div>
+            <div style="flex: 1; border-radius: var(--radius-lg); overflow: hidden; background: var(--color-bg-secondary); border: 1px solid var(--color-border); height: calc(100vh - 120px);">
+                <iframe id="grafana-iframe" src="" style="width: 100%; height: 100%; border: none;"></iframe>
+            </div>
+        </div>
+
+        <!-- VIEW: DOCUMENTATION -->
+        <div class="view" id="view-docs">
+            <div class="view-header">
+                <h1>Documentation</h1>
+            </div>
+            <div class="docs-container" style="padding: var(--spacing-xl); overflow-y: auto; max-height: calc(100vh - 100px);">
+
+                <div class="docs-section">
+                    <h2>Quick Overview</h2>
+                    <p>Mirza is a complete toolkit for managing an Apple Silicon Mac as a headless AI server from any Linux workstation. The Mac serves GGUF models locally via <strong>llama-cpp-python</strong> with Metal acceleration. You control it through the <code>mirza</code> CLI or this WebUI.</p>
+                </div>
+
+                <div class="docs-section">
+                    <div class="help-grid">
+                        <div class="help-column">
+                            <h3>WebUI Views</h3>
+                            <table>
+                                <tr><td><strong>Dashboard</strong></td><td>Server status, hardware info (Chip, RAM, GPU), active model, quick actions (Wake, Sleep, Reboot, Stop LLM), and live inference logs.</td></tr>
+                                <tr><td><strong>Chat</strong></td><td>Interactive chat interface using the currently served model.</td></tr>
+                                <tr><td><strong>Models</strong></td><td>Cloud catalog explorer with one-click download and serve capabilities.</td></tr>
+                                <tr><td><strong>Config</strong></td><td>Visual explorer of <code>mirza.conf</code> with refresh capability.</td></tr>
+                            </table>
+                        </div>
+                        <div class="help-column">
+                            <h3>Primary CLI Commands</h3>
+                            <table>
+                                <tr><td><code>mirza status</code></td><td>Check server, Llama.cpp API, and Grafana status.</td></tr>
+                                <tr><td><code>mirza serve [--ctx N] [--kv-q TYPE]</code></td><td>Start the llama.cpp inference server.</td></tr>
+                                <tr><td><code>mirza stop-llm</code></td><td>Stop the active inference server.</td></tr>
+                                <tr><td><code>mirza deploy &lt;repo&gt; [file]</code></td><td>Download and install a model from HuggingFace.</td></tr>
+                                <tr><td><code>mirza sleep / reboot</code></td><td>Remote power management.</td></tr>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:2rem; padding:1.5rem; background:rgba(255,165,0,0.05); border:1px solid rgba(255,165,0,0.1); border-radius:12px;">
+                        <h3 style="color:#ffa500; font-size:1.1rem; margin-bottom:1rem;">⚠️ Memory Safety</h3>
+                        <p>If a model exceeds available RAM (Weights + KV Cache + 6GB OS overhead > RAM), the card is grayed out and buttons are disabled. We won't let you crash your server by being overly optimistic.</p>
+                    </div>
+
+                    <h3 style="margin-top:2rem;">Storage Locations</h3>
+                    <table>
+                        <thead>
+                            <tr><th>Item</th><th>Path</th><th>Station</th></tr>
+                        </thead>
+                        <tbody>
+                            <tr><td>Downloaded Models</td><td><code>~/mirza-models/*.gguf</code></td><td>Server</td></tr>
+                            <tr><td>Mirza Stack</td><td><code>~/llmServe/</code></td><td>Server</td></tr>
+                            <tr><td>Configuration</td><td><code>~/mirza/mirza.conf</code></td><td>Server</td></tr>
+                            <tr><td>WebUI Backend</td><td><code>~/webui/</code></td><td>Server</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ═══════════════════ SETTINGS MODAL ═══════════════════ -->
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal modal-wide">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button class="btn-icon" id="btn-close-settings">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="modal-tabs">
+                <button class="modal-tab active" data-tab="tab-providers">Providers</button>
+                <button class="modal-tab" data-tab="tab-generation">Generation</button>
+                <button class="modal-tab" data-tab="tab-tools">Tools (MCP)</button>
+                <button class="modal-tab" data-tab="tab-data">Data</button>
+            </div>
+            <div class="modal-body">
+                <div class="tab-content active" id="tab-providers">
+                    <div class="providers-header">
+                        <p class="setting-hint" style="margin-bottom:12px">Configure OpenAI-compatible API endpoints.</p>
+                        <button class="btn-secondary" id="btn-add-provider">+ Add</button>
+                    </div>
+                    <div id="providers-list" class="providers-list"></div>
+                </div>
+                <div class="tab-content" id="tab-generation">
+                    <!-- Sampling -->
+                    <div class="setting-group-header">Sampling</div>
+                    <div class="setting-group">
+                        <label for="setting-temperature">Température</label>
+                        <div class="setting-range-row">
+                            <input type="range" id="setting-temperature" min="0" max="2" step="0.05" value="0.7" />
+                            <span id="temperature-value">0.7</span>
+                        </div>
+                    </div>
+                    <div class="setting-group">
+                        <label for="setting-top-p">Top-P (Nucleus)</label>
+                        <div class="setting-range-row">
+                            <input type="range" id="setting-top-p" min="0" max="1" step="0.01" value="0.95" />
+                            <span id="top-p-value">0.95</span>
+                        </div>
+                    </div>
+                    <div class="setting-group">
+                        <label for="setting-top-n">Top-N</label>
+                        <input type="number" id="setting-top-n" class="setting-input" value="40" min="1" max="100" />
+                        <span class="setting-hint">Nombre de tokens à considérer (0=désactivé)</span>
+                    </div>
+                    
+                    <!-- Repetition Control -->
+                    <div class="setting-group-header">Répétition</div>
+                    <div class="setting-group">
+                        <label for="setting-presence-penalty">Presence Penalty</label>
+                        <div class="setting-range-row">
+                            <input type="range" id="setting-presence-penalty" min="-2" max="2" step="0.01" value="0" />
+                            <span id="presence-penalty-value">0</span>
+                        </div>
+                    </div>
+                    <div class="setting-group">
+                        <label for="setting-frequency-penalty">Frequency Penalty</label>
+                        <div class="setting-range-row">
+                            <input type="range" id="setting-frequency-penalty" min="-2" max="2" step="0.01" value="0" />
+                            <span id="frequency-penalty-value">0</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Output -->
+                    <div class="setting-group-header">Output</div>
+                    <div class="setting-group">
+                        <label for="setting-max-tokens">Max tokens</label>
+                        <input type="number" id="setting-max-tokens" class="setting-input" value="4096" min="1" max="131072" />
+                    </div>
+                    <div class="setting-group">
+                        <label for="setting-stop">Stop sequences</label>
+                        <input type="text" id="setting-stop" class="setting-input" placeholder="TERMINATE, END, AI:" />
+                        <span class="setting-hint">Séparés par virgule</span>
+                    </div>
+                    
+                    <!-- System -->
+                    <div class="setting-group-header">Système</div>
+                    <div class="setting-group">
+                        <label for="setting-system-prompt">System prompt</label>
+                        <textarea id="setting-system-prompt" class="setting-textarea" rows="4">Tu es Mirza, un assistant IA intelligent et serviable. Tu réponds de manière claire, précise et concise en français.</textarea>
+                    </div>
+                </div>
+                <div class="tab-content" id="tab-tools">
+                    <div class="tools-status"><div class="tools-status-icon"></div><h3>Model Context Protocol</h3><p class="setting-hint">Connect an MCP server to give tools to your model.</p></div>
+                    <div class="mcp-server-config">
+                        <input type="text" id="setting-mcp-endpoint" placeholder="http://localhost:8000" />
+                        <button class="btn btn-secondary" id="btn-refresh-mcp">Connect</button>
+                    </div>
+                    <div id="mcp-tools-list" class="mcp-tools-list"><div class="mcp-empty">No MCP server connected</div></div>
+                </div>
+                <div class="tab-content" id="tab-data">
+                    <div class="setting-group"><button class="btn-secondary" id="btn-export-conversations">Export to JSON</button></div>
+                    <div class="setting-group"><button class="btn-danger" id="btn-clear-history">Clear all conversations</button></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast notifications -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <!-- Inference Options Modal -->
+    <div class="modal-overlay" id="overlay-inference">
+        <div class="modal" id="modal-inference-options">
+            <div class="modal-content" style="max-width: 450px;">
+                <div class="modal-header">
+                    <h2>Inference Settings</h2>
+                    <button class="modal-close" id="btn-close-inference">&times;</button>
+                </div>
+                <div class="modal-body" style="display: flex; flex-direction: column; gap: 1.5rem; padding: 1.5rem;">
+                    <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 0.5rem;">Adjust settings to optimize performance or memory.</p>
+                    
+                    <div class="field-group">
+                        <label style="display: block; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem;">Context Window (N_CTX)</label>
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem;">
+                            <button class="ctx-chip" data-val="2048">2k</button>
+                            <button class="ctx-chip" data-val="4096">4k</button>
+                            <button class="ctx-chip active" data-val="8192">8k</button>
+                            <button class="ctx-chip" data-val="16384">16k</button>
+                            <button class="ctx-chip" data-val="32768">32k</button>
+                            <button class="ctx-chip" data-val="128000">128k</button>
+                        </div>
+                    </div>
+
+                    <div class="field-group">
+                        <label style="display: block; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem;">KV Cache Quantization</label>
+                        <select id="option-kv-q" class="select-filter" style="width: 100%;">
+                            <option value="f16">F16 (Default - Max precision)</option>
+                            <option value="q8_0">Q8_0 (RAM saving - Recommended)</option>
+                            <option value="q4_0">Q4_0 (VRAM critical - Fast)</option>
+                        </select>
+                    </div>
+
+                    <div class="field-group">
+                        <label style="display: block; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem;">Chat Template</label>
+                        <select id="option-chat-format" class="select-filter" style="width: 100%;">
+                            <option value="">Auto-detect (recommandé)</option>
+                            <option value="chatml">ChatML (Qwen, Yi, DeepSeek)</option>
+                            <option value="llama-3">Llama 3</option>
+                            <option value="llama-2">Llama 2 / Mistral v0.1</option>
+                            <option value="mistral-instruct">Mistral Instruct (v0.2+)</option>
+                            <option value="gemma">Gemma 2</option>
+                        </select>
+                        <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 5px;">Indispensable si le modèle boucle ou répète ses instructions.</p>
+                    </div>
+
+                    <div class="field-group">
+                        <label style="display: block; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem;">Hardware & Attention</label>
+                        <div style="display: flex; flex-direction: column; gap: 0.75rem;">
+                            <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                                <span>Flash Attention</span>
+                                <input type="checkbox" id="option-flash-attn" checked style="width: 18px; height: 18px; accent-color: var(--color-primary);">
+                            </label>
+                            <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" title="Pins model to RAM to prevent swapping">
+                                <span>Memory Locking (MLOCK)</span>
+                                <input type="checkbox" id="option-mlock" checked style="width: 18px; height: 18px; accent-color: var(--color-primary);">
+                            </label>
+                            <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" title="Compiles shaders immediately on launch">
+                                <span>Warmup Shaders</span>
+                                <input type="checkbox" id="option-warmup" style="width: 18px; height: 18px; accent-color: var(--color-primary);">
+                            </label>
+                            <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                                <span>Paged Attention (vLLM style)</span>
+                                <input type="checkbox" id="option-paged-kv" style="width: 18px; height: 18px; accent-color: var(--color-primary);">
+                            </label>
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 1rem; display: flex; gap: 1rem;">
+                        <button class="btn btn-primary" id="btn-start-serve" style="flex: 1; padding: 0.75rem;">Launch Server</button>
+                    </div>
+
+                    <div class="field-group" style="margin-top: 1rem; border-top: 1px solid var(--border-color); padding-top: 1rem;">
+                        <label style="display: block; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem;">⚡ Auto-Tuning (llama-optimus)</label>
+                        <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+                            <label style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;">
+                                <span>Enable Tuning</span>
+                                <input type="checkbox" id="option-tune" style="width: 18px; height: 18px; accent-color: var(--color-primary);">
+                            </label>
+                            <div id="tune-options" style="display: none; padding: 0.75rem; background: var(--bg-secondary); border-radius: 8px;">
+                                <div style="display: flex; gap: 0.5rem;">
+                                    <div style="flex: 1;">
+                                        <label style="font-size: 0.75rem; color: var(--text-muted);">Trials</label>
+                                        <select id="option-trials" class="select-filter" style="width: 100%; font-size: 0.8rem;">
+                                            <option value="15">15 (fast)</option>
+                                            <option value="25" selected>25 (default)</option>
+                                            <option value="45">45 (thorough)</option>
+                                        </select>
+                                    </div>
+                                    <div style="flex: 1;">
+                                        <label style="font-size: 0.75rem; color: var(--text-muted);">Metric</label>
+                                        <select id="option-metric" class="select-filter" style="width: 100%; font-size: 0.8rem;">
+                                            <option value="tg" selected>Token Gen</option>
+                                            <option value="pp">Prompt Proc</option>
+                                            <option value="mean">Average</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <p style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.5rem;">Uses llama-bench (server can be running)</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Download Progress Bar (Floating) -->
+    <div id="global-download-progress" style="display: none; position: fixed; bottom: 2rem; right: 2rem; width: 300px; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1rem; box-shadow: var(--shadow-xl); z-index: 1000; animation: slideUp 0.3s ease;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <span style="font-weight: 600; font-size: 0.85rem;">Downloading...</span>
+            <span id="download-percent" style="font-size: 0.85rem; color: var(--color-primary);">0%</span>
+        </div>
+        <div class="progress-container" style="height: 6px; background: rgba(255,255,255,0.05); border-radius: 3px; overflow: hidden;">
+            <div id="download-progress-bar" style="height: 100%; width: 0%; background: var(--color-primary); transition: width 0.3s ease;"></div>
+        </div>
+        <p id="download-status-text" style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.5rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Analyzing repository...</p>
+    </div>
+
+    <style>
+        .ctx-chip {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 0.4rem;
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .ctx-chip:hover { border-color: var(--color-primary); color: var(--text-color); }
+        .ctx-chip.active { background: var(--color-primary); color: white; border-color: var(--color-primary); }
+        
+        @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    </style>
+
+    <script src="app.js"></script>
+</body>
+</html>

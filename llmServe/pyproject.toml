@@ -1,0 +1,34 @@
+[project]
+name = "llmserve"
+version = "1.0.0"
+description = "Mirza AI — LLM Inference Backend powered by llama-cpp-python"
+readme = "README.md"
+requires-python = ">=3.13"
+
+dependencies = [
+    # Core inference engine (OpenAI-compatible HTTP server included via [server] extra)
+    "llama-cpp-python[server]>=0.3.20",
+
+    # HuggingFace Hub — model download, repo listing, authentication
+    "huggingface-hub>=1.10.1",
+
+    # Rich progress bars for download reporting
+    "tqdm>=4.67.3",
+]
+
+[project.optional-dependencies]
+# Monitoring / metrics endpoint (optional but recommended)
+metrics = [
+    "prometheus-client>=0.21.1",
+]
+# Auto-tuning for llama.cpp parameters
+tune = [
+    "llama-optimus>=0.1.7",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]

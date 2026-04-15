@@ -1,0 +1,23 @@
+{
+  "_meta": {
+    "description": "Mirza AI — Catalogue Dynamique GGML (Real-time)",
+    "source": "https://huggingface.co/api/models?author=ggml-org&library=gguf&sort=downloads&direction=-1",
+    "last_updated": "2026-04-13",
+    "notes": "Les modèles sont récupérés en direct de l'organisation ggml-org sur HuggingFace."
+  },
+  "ram_tiers": {
+    "8GB":  { "label": "8 Go",  "max_model_gb": 4,  "description": "Modèles légers (1B-3B) ou quants hautement compressés" },
+    "16GB": { "label": "16 Go", "max_model_gb": 10, "description": "Modèles standard (7B-8B)" },
+    "24GB": { "label": "24 Go", "max_model_gb": 16, "description": "Modèles performants (11B-14B)" },
+    "32GB": { "label": "32 Go", "max_model_gb": 22, "description": "Modèles avancés ou quants haute fidélité" },
+    "64GB": { "label": "64 Go", "max_model_gb": 50, "description": "Modèles massifs (70B+)" }
+  },
+  "categories": {
+    "general": { "icon": "💬", "label": "Conversation", "description": "Polyvalent" },
+    "code":    { "icon": "💻", "label": "Code", "description": "Programmation" },
+    "reasoning": { "icon": "🧠", "label": "Raisonnement", "description": "Logique avancée" },
+    "vision":  { "icon": "👁️", "label": "Vision / VLM", "description": "Multi-modalité" },
+    "light":   { "icon": "⚡", "label": "Léger", "description": "Vitesse maximale" }
+  },
+  "catalog": []
+}
