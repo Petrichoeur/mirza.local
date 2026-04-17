@@ -50,12 +50,15 @@ const state = {
         // Sampling parameters (OpenAI compatible)
         temperature: 0.7,
         top_p: 1.0,
-        top_n: 40,
+        top_k: 20,
+        min_p: 0.0,
         max_tokens: 4096,
         // Repetition control
         frequency_penalty: 0.0,
         presence_penalty: 0.0,
-        repetition_penalty: 1.1,
+        repetition_penalty: 1.0,
+        // Reasoning
+        disable_thinking: false,
         // Stop sequences
         stop: null,
         // Response format
@@ -73,6 +76,12 @@ const state = {
         mcpEndpoint: '',
         mcpTools: [],
         mcpEnabled: {}
+    },
+    presets: {
+        'thinking-general': { temperature: 1.0, top_p: 0.95, top_k: 20, min_p: 0.0, presence_penalty: 1.5, repetition_penalty: 1.0, disable_thinking: false },
+        'thinking-coding': { temperature: 0.6, top_p: 0.95, top_k: 20, min_p: 0.0, presence_penalty: 0.0, repetition_penalty: 1.0, disable_thinking: false },
+        'instruction-general': { temperature: 0.7, top_p: 0.8, top_k: 20, min_p: 0.0, presence_penalty: 1.5, repetition_penalty: 1.0, disable_thinking: true },
+        'instruction-reasoning': { temperature: 1.0, top_p: 1.0, top_k: 40, min_p: 0.0, presence_penalty: 2.0, repetition_penalty: 1.0, disable_thinking: true },
     }
 };
 
@@ -88,12 +97,15 @@ function initDom() {
         'message-input', 'btn-send', 'btn-new-chat',
         'provider-select', 'model-select', 'provider-status-dot',
         'token-counter', 'settings-modal', 'btn-settings', 'btn-close-settings',
-        'setting-temperature', 'temperature-value',
-        'setting-top-p', 'top-p-value',
-        'setting-repetition-penalty', 'repetition-penalty-value',
-        'setting-top-n', 'setting-stop',
-        'setting-presence-penalty', 'presence-penalty-value',
-        'setting-frequency-penalty', 'frequency-penalty-value',
+        'setting-temperature',
+        'setting-top-p',
+        'setting-top-k',
+        'setting-min-p',
+        'setting-repetition-penalty',
+        'setting-disable-thinking',
+        'setting-stop',
+        'setting-presence-penalty',
+        'setting-frequency-penalty',
         'setting-max-tokens', 'setting-system-prompt',
         'setting-mcp-endpoint',
         'mcp-tools-list', 'btn-refresh-mcp',
@@ -137,14 +149,15 @@ function initDom() {
     dom.btnSettings = document.getElementById('btn-settings');
     dom.btnCloseSettings = document.getElementById('btn-close-settings');
     dom.settingTemperature = document.getElementById('setting-temperature');
-    dom.temperatureValue = document.getElementById('temperature-value');
+    dom.settingTopP = document.getElementById('setting-top-p');
     dom.settingMaxTokens = document.getElementById('setting-max-tokens');
-    dom.settingTopN = document.getElementById('setting-top-n');
+    dom.settingTopK = document.getElementById('setting-top-k');
+    dom.settingMinP = document.getElementById('setting-min-p');
     dom.settingStop = document.getElementById('setting-stop');
     dom.settingPresencePenalty = document.getElementById('setting-presence-penalty');
-    dom.presencePenaltyValue = document.getElementById('presence-penalty-value');
     dom.settingFrequencyPenalty = document.getElementById('setting-frequency-penalty');
-    dom.frequencyPenaltyValue = document.getElementById('frequency-penalty-value');
+    dom.settingRepetitionPenalty = document.getElementById('setting-repetition-penalty');
+    dom.settingDisableThinking = document.getElementById('setting-disable-thinking');
     dom.settingSystemPrompt = document.getElementById('setting-system-prompt');
     dom.settingMcpEndpoint = document.getElementById('setting-mcp-endpoint');
     dom.mcpToolsList = document.getElementById('mcp-tools-list');
@@ -244,35 +257,18 @@ function loadState() {
     state.activeConversationId = localStorage.getItem('mirza_active_conversation');
 
     // Load from state.settings (new naming)
-    dom.settingTemperature.value = state.settings.temperature || 0.7;
-    dom.temperatureValue.textContent = state.settings.temperature || 0.7;
-    if (dom.settingTopP) {
-        dom.settingTopP.value = state.settings.top_p || 0.95;
-        dom.topPValue.textContent = state.settings.top_p || 0.95;
-    }
-    if (dom.settingTopN) {
-        dom.settingTopN.value = state.settings.top_n || 40;
-    }
-    if (dom.settingPresencePenalty) {
-        dom.settingPresencePenalty.value = state.settings.presence_penalty || 0;
-        dom.presencePenaltyValue.textContent = state.settings.presence_penalty || 0;
-    }
-    if (dom.settingFrequencyPenalty) {
-        dom.settingFrequencyPenalty.value = state.settings.frequency_penalty || 0;
-        dom.frequencyPenaltyValue.textContent = state.settings.frequency_penalty || 0;
-    }
-    if (dom.settingStop) {
-        dom.settingStop.value = (state.settings.stop || []).join(', ');
-    }
-    if (dom.settingMaxTokens) {
-        dom.settingMaxTokens.value = state.settings.max_tokens || 4096;
-    }
-    if (dom.settingSystemPrompt) {
-        dom.settingSystemPrompt.value = state.settings.systemPrompt || '';
-    }
-    if (dom.settingMcpEndpoint) {
-        dom.settingMcpEndpoint.value = state.settings.mcpEndpoint || '';
-    }
+    if (dom.settingTemperature) dom.settingTemperature.value = state.settings.temperature || 0.7;
+    if (dom.settingTopP) dom.settingTopP.value = state.settings.top_p || 0.95;
+    if (dom.settingTopK) dom.settingTopK.value = state.settings.top_k || 20;
+    if (dom.settingMinP) dom.settingMinP.value = state.settings.min_p || 0.0;
+    if (dom.settingPresencePenalty) dom.settingPresencePenalty.value = state.settings.presence_penalty || 0;
+    if (dom.settingFrequencyPenalty) dom.settingFrequencyPenalty.value = state.settings.frequency_penalty || 0;
+    if (dom.settingRepetitionPenalty) dom.settingRepetitionPenalty.value = state.settings.repetition_penalty || 1.0;
+    if (dom.settingDisableThinking) dom.settingDisableThinking.checked = state.settings.disable_thinking || false;
+    if (dom.settingStop) dom.settingStop.value = (state.settings.stop || []).join(', ');
+    if (dom.settingMaxTokens) dom.settingMaxTokens.value = state.settings.max_tokens || 4096;
+    if (dom.settingSystemPrompt) dom.settingSystemPrompt.value = state.settings.systemPrompt || '';
+    if (dom.settingMcpEndpoint) dom.settingMcpEndpoint.value = state.settings.mcpEndpoint || '';
 }
 
 function saveState() {
@@ -306,6 +302,12 @@ function toast(message, type = 'info') {
 // Navigation / Views
 // =================================================================
 function switchView(viewName) {
+    // Cancel any pending requests before switching views
+    if (state.abortController) {
+        state.abortController.abort();
+    }
+    state.abortController = new AbortController();
+
     state.currentView = viewName;
 
     // Update nav
@@ -404,10 +406,24 @@ function setupEventListeners() {
         renderProviderCards();
     });
 
-    // Settings modal
+    // Settings modal - auto-save on input changes
     dom.btnSettings.addEventListener('click', () => { renderProviderCards(); dom.settingsModal.classList.add('visible'); });
     dom.btnCloseSettings.addEventListener('click', () => { dom.settingsModal.classList.remove('visible'); saveSettings(); });
     dom.settingsModal.addEventListener('click', (e) => { if (e.target === dom.settingsModal) { dom.settingsModal.classList.remove('visible'); saveSettings(); } });
+
+    // Auto-save settings when any input changes
+    const settingInputs = [
+        'setting-temperature', 'setting-top-p', 'setting-top-k', 'setting-min-p',
+        'setting-presence-penalty', 'setting-frequency-penalty', 'setting-repetition-penalty',
+        'setting-disable-thinking', 'setting-max-tokens', 'setting-stop', 'setting-system-prompt'
+    ];
+    settingInputs.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            const eventType = el.type === 'checkbox' ? 'change' : 'change';
+            el.addEventListener(eventType, () => { saveSettings(); });
+        }
+    });
 
     // Tabs
     document.querySelectorAll('.modal-tab').forEach(tab => {
@@ -419,20 +435,11 @@ function setupEventListeners() {
         });
     });
 
-    dom.settingTemperature.addEventListener('input', (e) => dom.temperatureValue.textContent = e.target.value);
-    if (dom.settingTopP) {
-        dom.settingTopP.addEventListener('input', (e) => dom.topPValue.textContent = e.target.value);
-    }
-    if (dom.settingRepetitionPenalty) {
-        dom.settingRepetitionPenalty.addEventListener('input', (e) => dom.repetitionPenaltyValue.textContent = e.target.value);
-    }
-    // New penalty settings
-    if (dom.settingPresencePenalty) {
-        dom.settingPresencePenalty.addEventListener('input', (e) => dom.presencePenaltyValue.textContent = e.target.value);
-    }
-    if (dom.settingFrequencyPenalty) {
-        dom.settingFrequencyPenalty.addEventListener('input', (e) => dom.frequencyPenaltyValue.textContent = e.target.value);
-    }
+    // Preset buttons
+    document.querySelectorAll('.preset-btn').forEach(btn => {
+        btn.addEventListener('click', () => applyPreset(btn.dataset.preset));
+    });
+
     dom.btnAddProvider.addEventListener('click', addCustomProvider);
     dom.btnRefreshMcp.addEventListener('click', refreshMcpTools);
     dom.btnExportConversations.addEventListener('click', exportConversations);
@@ -543,18 +550,8 @@ function setupEventListeners() {
 // Dashboard
 // =================================================================
 async function loadDashboard() {
-    const now = Date.now();
-    // Reduced frequency: 10s debounce for background status checks
-    if (state._isDashFetching || (state._lastDashPoll && now - state._lastDashPoll < 10000)) {
-        return;
-    }
-    state._isDashFetching = true;
-    state._lastDashPoll = now;
-
-    // Timer management removed here, centralized in scheduler
-
     try {
-        const res = await fetch('/api/status');
+        const res = await fetch('/api/status', { signal: state.abortController?.signal });
         const data = await res.json();
         state.dashboardData = data;
 
@@ -708,7 +705,7 @@ function setDashStatus(status, text) {
 async function loadLogs(silent = false) {
     if (!silent) dom.dashLogs.innerHTML = '<span style="color:#666">Loading logs...</span>';
     try {
-        const res = await fetch('/api/llm/logs');
+        const res = await fetch('/api/llm/logs', { signal: state.abortController?.signal });
         const data = await res.json();
         if (data.logs && data.logs.trim()) {
             // Performance: Slice to last 1000 lines to prevent browser freeze on large log files
@@ -824,7 +821,7 @@ async function fetchGgufFileSizes(repoId) {
  */
 async function fetchModelMeta(repoId) {
     try {
-        const res = await fetch(`https://huggingface.co/api/models/${repoId}`);
+        const res = await fetch(`https://huggingface.co/api/models/${repoId}`, { signal: state.abortController?.signal });
         if (!res.ok) return null;
         const data = await res.json();
         return {
@@ -970,7 +967,7 @@ async function mapLimit(array, limit, mapper, onProgress) {
 
 async function syncInstalledModels(silent = false) {
     try {
-        const res = await fetch('/api/llm/installed');
+        const res = await fetch('/api/llm/installed', { signal: state.abortController?.signal });
         const data = await res.json();
         if (data.installed) {
             state.installedModels = data.installed;
@@ -987,6 +984,7 @@ async function loadModelsCatalog() {
     syncInstalledModels(true);
 
     try {
+        const signal = state.abortController?.signal;
         const orgList = [...state.activeOrgs];
         const orgLabel = orgList.join(' + ');
 
@@ -1766,7 +1764,7 @@ window.serveModel = serveModel;
 // =================================================================
 async function loadConfig() {
     try {
-        const res = await fetch('/api/config');
+        const res = await fetch('/api/config', { signal: state.abortController?.signal });
         const data = await res.json();
         if (data.config) {
             renderConfig(data.config);
@@ -1863,12 +1861,12 @@ function renderConfig(config) {
 
 async function initMonitoring() {
     if (!dom.grafanaIframe) return;
-    
+
     // Check if we already have a specialized URL
     if (state._monUrlLoaded) return;
-    
+
     try {
-        const res = await fetch('/api/llm/monitoring');
+        const res = await fetch('/api/llm/monitoring', { signal: state.abortController?.signal });
         const data = await res.json();
         if (data.ok && data.url) {
             console.log("Monitoring Auto-Discovery:", data.url);
@@ -1970,16 +1968,21 @@ function setActiveProvider(id) {
 }
 
 window.setActiveProvider = setActiveProvider;
-window.deleteProvider = deleteProvider;
+    window.deleteProvider = deleteProvider;
+    window.applyPreset = applyPreset;
 
 function saveSettings() {
     // Sampling
     state.settings.temperature = parseFloat(dom.settingTemperature?.value || 0.7);
     state.settings.top_p = parseFloat(dom.settingTopP?.value || 1.0);
-    state.settings.top_n = parseInt(dom.settingTopN?.value || 40) || undefined;
+    state.settings.top_k = parseInt(dom.settingTopK?.value || 20) || undefined;
+    state.settings.min_p = parseFloat(dom.settingMinP?.value || 0.0);
     // Repetition
     state.settings.presence_penalty = parseFloat(dom.settingPresencePenalty?.value || 0);
     state.settings.frequency_penalty = parseFloat(dom.settingFrequencyPenalty?.value || 0);
+    state.settings.repetition_penalty = parseFloat(dom.settingRepetitionPenalty?.value || 1.0);
+    // Reasoning
+    state.settings.disable_thinking = dom.settingDisableThinking?.checked || false;
     // Output
     state.settings.max_tokens = parseInt(dom.settingMaxTokens?.value || 4096);
     state.settings.stop = dom.settingStop?.value ? dom.settingStop.value.split(',').map(s => s.trim()).filter(s => s) : null;
@@ -1989,6 +1992,21 @@ function saveSettings() {
     saveProvidersFromCards();
     saveState();
     checkProviderStatus();
+}
+
+function applyPreset(name) {
+    const preset = state.presets[name];
+    if (!preset) return;
+    if (dom.settingTemperature) dom.settingTemperature.value = preset.temperature;
+    if (dom.settingTopP) dom.settingTopP.value = preset.top_p;
+    if (dom.settingTopK) dom.settingTopK.value = preset.top_k;
+    if (dom.settingMinP) dom.settingMinP.value = preset.min_p;
+    if (dom.settingPresencePenalty) dom.settingPresencePenalty.value = preset.presence_penalty;
+    if (dom.settingRepetitionPenalty) dom.settingRepetitionPenalty.value = preset.repetition_penalty;
+    if (dom.settingDisableThinking) dom.settingDisableThinking.checked = preset.disable_thinking || false;
+    saveSettings();
+    document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('active'));
+    document.querySelector(`[data-preset="${name}"]`)?.classList.add('active');
 }
 
 // =================================================================
@@ -2229,20 +2247,41 @@ async function sendMessage() {
 
         const modelName = dom.modelSelect.value || provider.model || 'default';
         const stopTokens = getStopTokens(state.inferenceConfig.chat_format, modelName);
-        
-        const body = { 
-            model: modelName, 
-            messages: msgs, 
-            max_tokens: state.settings.max_tokens || 4096, 
+
+        const body = {
+            model: modelName,
+            messages: msgs,
+            max_tokens: state.settings.max_tokens || 4096,
             temperature: state.settings.temperature || 0.7,
             top_p: state.settings.top_p ?? 1.0,
-            top_n: state.settings.top_n || undefined,
+            top_k: state.settings.top_k || undefined,
+            min_p: state.settings.min_p || undefined,
             frequency_penalty: state.settings.frequency_penalty || 0.0,
             presence_penalty: state.settings.presence_penalty || 0.0,
+            repetition_penalty: state.settings.repetition_penalty || 1.0,
             stop: stopTokens,
-            stream: true 
+            stream: true
         };
-        
+
+        // Disable thinking (Qwen3.5 approach)
+        if (state.settings.disable_thinking) {
+            body.chat_template_kwargs = { enable_thinking: false };
+            body.thinking_budget_tokens = 0;
+        }
+
+        // Debug: log settings being sent (all thinking-related params)
+        console.log('[Mirza] Request settings:', {
+            temperature: body.temperature,
+            top_p: body.top_p,
+            top_k: body.top_k,
+            min_p: body.min_p,
+            presence_penalty: body.presence_penalty,
+            repetition_penalty: body.repetition_penalty,
+            thinking_budget_tokens: body.thinking_budget_tokens,
+            reasoning_budget: body.reasoning_budget,
+            chat_template_kwargs: body.chat_template_kwargs
+        });
+
         // Only include additional params if they're set
         if (state.settings.seed !== null && state.settings.seed !== undefined) body.seed = parseInt(state.settings.seed);
         if (state.settings.response_format) body.response_format = state.settings.response_format;

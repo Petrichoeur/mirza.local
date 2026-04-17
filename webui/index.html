@@ -554,45 +554,57 @@
                     <div id="providers-list" class="providers-list"></div>
                 </div>
                 <div class="tab-content" id="tab-generation">
+                    <!-- Presets -->
+                    <div class="setting-group-header">Presets</div>
+                    <div class="preset-buttons">
+                        <button class="preset-btn" data-preset="thinking-general">Thinking (General)</button>
+                        <button class="preset-btn" data-preset="thinking-coding">Thinking (Code)</button>
+                        <button class="preset-btn" data-preset="instruction-general">Instruction (General)</button>
+                        <button class="preset-btn" data-preset="instruction-reasoning">Instruction (Reasoning)</button>
+                    </div>
+                    <div class="setting-group">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="setting-disable-thinking" />
+                            <span>Désactiver le thinking (thinking_budget_tokens=0)</span>
+                        </label>
+                    </div>
+
                     <!-- Sampling -->
                     <div class="setting-group-header">Sampling</div>
                     <div class="setting-group">
                         <label for="setting-temperature">Température</label>
-                        <div class="setting-range-row">
-                            <input type="range" id="setting-temperature" min="0" max="2" step="0.05" value="0.7" />
-                            <span id="temperature-value">0.7</span>
-                        </div>
+                        <input type="number" id="setting-temperature" class="setting-input" value="0.7" min="0" max="2" step="0.05" />
                     </div>
                     <div class="setting-group">
                         <label for="setting-top-p">Top-P (Nucleus)</label>
-                        <div class="setting-range-row">
-                            <input type="range" id="setting-top-p" min="0" max="1" step="0.01" value="0.95" />
-                            <span id="top-p-value">0.95</span>
-                        </div>
+                        <input type="number" id="setting-top-p" class="setting-input" value="0.95" min="0" max="1" step="0.01" />
                     </div>
                     <div class="setting-group">
-                        <label for="setting-top-n">Top-N</label>
-                        <input type="number" id="setting-top-n" class="setting-input" value="40" min="1" max="100" />
+                        <label for="setting-top-k">Top-K</label>
+                        <input type="number" id="setting-top-k" class="setting-input" value="20" min="0" max="100" />
                         <span class="setting-hint">Nombre de tokens à considérer (0=désactivé)</span>
                     </div>
-                    
+                    <div class="setting-group">
+                        <label for="setting-min-p">Min-P</label>
+                        <input type="number" id="setting-min-p" class="setting-input" value="0" min="0" max="1" step="0.01" />
+                        <span class="setting-hint">Probabilité minimale relative</span>
+                    </div>
+
                     <!-- Repetition Control -->
                     <div class="setting-group-header">Répétition</div>
                     <div class="setting-group">
                         <label for="setting-presence-penalty">Presence Penalty</label>
-                        <div class="setting-range-row">
-                            <input type="range" id="setting-presence-penalty" min="-2" max="2" step="0.01" value="0" />
-                            <span id="presence-penalty-value">0</span>
-                        </div>
+                        <input type="number" id="setting-presence-penalty" class="setting-input" value="0" min="-2" max="2" step="0.01" />
                     </div>
                     <div class="setting-group">
                         <label for="setting-frequency-penalty">Frequency Penalty</label>
-                        <div class="setting-range-row">
-                            <input type="range" id="setting-frequency-penalty" min="-2" max="2" step="0.01" value="0" />
-                            <span id="frequency-penalty-value">0</span>
-                        </div>
+                        <input type="number" id="setting-frequency-penalty" class="setting-input" value="0" min="-2" max="2" step="0.01" />
                     </div>
-                    
+                    <div class="setting-group">
+                        <label for="setting-repetition-penalty">Repetition Penalty</label>
+                        <input type="number" id="setting-repetition-penalty" class="setting-input" value="1" min="1" max="2" step="0.01" />
+                    </div>
+
                     <!-- Output -->
                     <div class="setting-group-header">Output</div>
                     <div class="setting-group">
@@ -604,7 +616,7 @@
                         <input type="text" id="setting-stop" class="setting-input" placeholder="TERMINATE, END, AI:" />
                         <span class="setting-hint">Séparés par virgule</span>
                     </div>
-                    
+
                     <!-- System -->
                     <div class="setting-group-header">Système</div>
                     <div class="setting-group">
